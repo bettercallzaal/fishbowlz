@@ -57,7 +57,7 @@ function timeUntil(dateStr: string): string {
 
 export default function FishbowlzPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, login, logout, authenticated } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -123,12 +123,42 @@ export default function FishbowlzPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-[#f5a623]">FISHBOWLZ</h1>
           <p className="text-xs sm:text-sm text-gray-400">Persistent async fishbowl audio spaces</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-[#f5a623] text-[#0a1628] font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors text-sm sm:text-base min-h-[44px]"
-        >
-          + Create
-        </button>
+        <div className="flex items-center gap-2">
+          {!authLoading && (
+            authenticated && user ? (
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-1.5 text-sm text-gray-400">
+                  {user.pfpUrl && (
+                    <img src={user.pfpUrl} alt="" className="w-6 h-6 rounded-full" />
+                  )}
+                  <span>@{user.username}</span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="text-xs text-gray-500 hover:text-white border border-white/10 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={login}
+                className="text-sm text-[#f5a623] border border-[#f5a623]/40 hover:bg-[#f5a623]/10 px-3 py-1.5 rounded-lg transition-colors min-h-[36px]"
+              >
+                Sign in
+              </button>
+            )
+          )}
+          <button
+            onClick={() => {
+              if (!authenticated) { login(); return; }
+              setShowCreate(true);
+            }}
+            className="bg-[#f5a623] text-[#0a1628] font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors text-sm sm:text-base min-h-[44px]"
+          >
+            + Create
+          </button>
+        </div>
       </div>
 
       {/* Create Modal */}
@@ -249,8 +279,8 @@ export default function FishbowlzPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={handleCreate}
-                disabled={!title.trim() || !user}
+                onClick={user ? handleCreate : login}
+                disabled={!!user && !title.trim()}
                 className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50"
               >
                 {user ? (scheduleDate ? 'Schedule' : 'Create') : 'Sign in first'}

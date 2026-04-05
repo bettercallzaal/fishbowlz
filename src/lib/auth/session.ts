@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { SessionData } from '@/types';
 import { ENV } from '@/lib/env';
 import { communityConfig } from '@/../community.config';
+import { verifyPrivyToken } from './privy-server';
 
 const ADMIN_FIDS: readonly number[] = communityConfig.adminFids;
 const ADMIN_WALLETS: readonly string[] = communityConfig.adminWallets;
@@ -36,6 +37,28 @@ export async function getSession(): Promise<IronSession<SessionPayload>> {
 }
 
 export const getSessionData = cache(async (): Promise<SessionData | null> => {
+  const cookieStore = await cookies();
+
+  // 1. Try Privy identity token cookie (Privy sets 'privy-id-token' automatically)
+  const privyTokenCookie = cookieStore.get('privy-id-token');
+  if (privyTokenCookie?.value) {
+    const privyData = await verifyPrivyToken(`Bearer ${privyTokenCookie.value}`);
+    if (privyData) {
+      return {
+        fid: privyData.fid,
+        walletAddress: null,
+        authMethod: 'farcaster',
+        username: privyData.username,
+        displayName: privyData.username,
+        pfpUrl: '',
+        signerUuid: null,
+        isAdmin: ADMIN_FIDS.includes(privyData.fid) || privyData.isAdmin,
+        authenticated: true,
+      };
+    }
+  }
+
+  // 2. Fall back to iron-session
   const session = await getSession();
   // Valid session: has either FID or wallet address
   if (!session.fid && !session.walletAddress) return null;
@@ -48,6 +71,7 @@ export const getSessionData = cache(async (): Promise<SessionData | null> => {
     pfpUrl: session.pfpUrl || '',
     signerUuid: session.signerUuid || null,
     isAdmin: session.isAdmin || false,
+    authenticated: true,
   };
 });
 

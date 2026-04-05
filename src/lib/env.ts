@@ -9,4 +9,5 @@ export const ENV = {
   ZAO_OFFICIAL_SIGNER_UUID: process.env.ZAO_OFFICIAL_SIGNER_UUID || '',
   ZAO_OFFICIAL_NEYNAR_API_KEY: process.env.ZAO_OFFICIAL_NEYNAR_API_KEY || '',
   ZAO_OFFICIAL_FID: process.env.ZAO_OFFICIAL_FID || '',
+  PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET || '',
 };
