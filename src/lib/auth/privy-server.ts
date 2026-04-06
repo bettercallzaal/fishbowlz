@@ -65,6 +65,7 @@ export async function verifyPrivyToken(authHeader: string | null): Promise<{
 
     const userId = payload.sub || '';
 
+    // Check if farcaster data is embedded in the token (identity tokens have this)
     const fc = payload.farcaster;
     if (fc?.fid) {
       return {
@@ -74,7 +75,39 @@ export async function verifyPrivyToken(authHeader: string | null): Promise<{
       };
     }
 
-    // Fallback: pseudo-FID from user ID
+    // Access tokens don't embed farcaster data — look up the user via Privy SDK
+    if (userId) {
+      try {
+        const client = getPrivyClient();
+        const privyUser = await client.users()._get(userId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const accounts = (privyUser as any)?.linked_accounts as Array<{ type: string; fid?: number; username?: string; address?: string }> | undefined;
+        const linkedFc = accounts?.find((a) => a.type === 'farcaster' && a.fid);
+        if (linkedFc?.fid) {
+          return {
+            fid: linkedFc.fid,
+            username: linkedFc.username || `fid-${linkedFc.fid}`,
+            isAdmin: false,
+          };
+        }
+
+        // User exists but no Farcaster linked — use wallet or email identity
+        const walletAccount = accounts?.find((a) => a.type === 'wallet');
+        const emailAccount = accounts?.find((a) => a.type === 'email');
+        const walletAddr = walletAccount?.address;
+        const emailAddr = emailAccount?.address;
+        const pseudoFid = Math.abs(hashCode(userId)) % 1000000000;
+        return {
+          fid: pseudoFid,
+          username: emailAddr?.split('@')[0] || walletAddr?.slice(0, 8) || 'anon',
+          isAdmin: false,
+        };
+      } catch {
+        // Privy SDK call failed — fall through to pseudo-FID
+      }
+    }
+
+    // Last resort: pseudo-FID from user ID
     const pseudoFid = Math.abs(hashCode(userId)) % 1000000000;
     const username =
       payload.email?.address?.split('@')[0] ||
