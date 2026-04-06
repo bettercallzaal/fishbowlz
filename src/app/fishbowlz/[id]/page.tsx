@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { TranscriptInput } from '@/components/spaces/TranscriptInput';
 import { FishbowlChat } from '@/components/spaces/FishbowlChat';
 import { Reactions } from '@/components/fishbowlz/Reactions';
+import { TipButton } from '@/components/fishbowlz/TipButton';
 import { useToast, ToastProvider } from '@/components/ui/Toast';
 import dynamic from 'next/dynamic';
 
@@ -385,7 +386,7 @@ function FishbowlRoomPageInner() {
           )}
           <span className={`text-xs px-2 py-1 rounded-full ${
             room.state === 'active'
-              ? 'bg-green-600/20 text-green-400'
+              ? 'bg-[#f5a623]/20 text-[#f5a623]'
               : 'bg-gray-600/20 text-gray-400'
           }`}>
             {room.state}
@@ -407,7 +408,7 @@ function FishbowlRoomPageInner() {
         <div className="flex-1 p-4 sm:p-6">
           {/* Ended banner */}
           {room.state === 'ended' && (
-            <div className="mb-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-center">
+            <div className="mb-4 p-3 bg-gray-800/50 rounded-lg border border-white/[0.08] text-center">
               <p className="text-gray-400 text-sm">This fishbowl has ended</p>
             </div>
           )}
@@ -474,26 +475,33 @@ function FishbowlRoomPageInner() {
                           <p className="text-xs text-gray-400">🔥 Hot seat</p>
                           <SpeakerTime joinedAt={speaker.joinedAt} />
                         </div>
-                        {isHost && speaker.fid !== user?.fid && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
-                              });
-                              if (res.ok) {
-                                toast(`Moved @${speaker.username} to listeners`, 'info');
-                                await fetchRoom();
-                              }
-                            }}
-                            className="text-[10px] text-red-400 hover:text-red-300 mt-0.5"
-                            title="Move to listeners"
-                          >
-                            kick
-                          </button>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {isHost && speaker.fid !== user?.fid && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
+                                });
+                                if (res.ok) {
+                                  toast(`Moved @${speaker.username} to listeners`, 'info');
+                                  await fetchRoom();
+                                }
+                              }}
+                              className="text-[10px] text-red-400 hover:text-red-300"
+                              title="Move to listeners"
+                            >
+                              kick
+                            </button>
+                          )}
+                          <TipButton
+                            speakerFid={speaker.fid}
+                            speakerUsername={speaker.username}
+                            roomId={room.id}
+                          />
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -627,7 +635,7 @@ function FishbowlRoomPageInner() {
                             toast(err.error || 'Failed to approve', 'error');
                           }
                         }}
-                        className="text-xs px-2 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors"
+                        className="text-xs px-2 py-1 bg-[#f5a623]/15 text-[#ffd700] rounded hover:bg-[#f5a623]/25 transition-colors"
                       >
                         Approve
                       </button>
