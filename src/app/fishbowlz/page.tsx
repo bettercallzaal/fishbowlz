@@ -58,7 +58,7 @@ function timeUntil(dateStr: string): string {
 
 export default function FishbowlzPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, login, authenticated } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -124,17 +124,34 @@ export default function FishbowlzPage() {
   return (
     <div className="min-h-screen bg-[#0a1628] text-white">
       {/* Header */}
-      <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#f5a623]">FISHBOWLZ</h1>
-          <p className="text-xs sm:text-sm text-gray-400">Persistent async fishbowl audio spaces</p>
+      <div className="border-b border-white/5 px-4 sm:px-6 py-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🐟</span>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">FISHBOWLZ</h1>
+            <p className="text-[11px] text-gray-500 tracking-wide uppercase">Persistent Audio Rooms</p>
+          </div>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-[#f5a623] text-[#0a1628] font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors text-sm sm:text-base min-h-[44px]"
-        >
-          + Create
-        </button>
+        <div className="flex items-center gap-2">
+          {authenticated ? (
+            <>
+              <span className="text-xs text-gray-400 hidden sm:block">@{user?.username}</span>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="bg-[#f5a623] text-[#0a1628] font-semibold px-5 py-2.5 rounded-full hover:bg-[#d4941f] transition-all hover:shadow-[0_0_20px_rgba(245,166,35,0.2)] text-sm min-h-[44px]"
+              >
+                + Create
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => login()}
+              className="bg-[#f5a623] text-[#0a1628] font-semibold px-5 py-2.5 rounded-full hover:bg-[#d4941f] transition-all text-sm min-h-[44px]"
+            >
+              Sign In
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Create Modal */}
@@ -290,11 +307,11 @@ export default function FishbowlzPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={handleCreate}
-                disabled={!title.trim() || !user}
+                onClick={authenticated ? handleCreate : () => login()}
+                disabled={authenticated ? !title.trim() : false}
                 className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50"
               >
-                {user ? (scheduleDate ? 'Schedule' : 'Create') : 'Sign in first'}
+                {authenticated ? (scheduleDate ? 'Schedule' : 'Create') : 'Sign in to Create'}
               </button>
               <button
                 onClick={() => setShowCreate(false)}
