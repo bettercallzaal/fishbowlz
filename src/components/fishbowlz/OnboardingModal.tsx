@@ -37,8 +37,8 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
   const isLast = step === steps.length - 1;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-[#1e3148] rounded-t-2xl sm:rounded-2xl p-6 sm:p-8 w-full max-w-md border border-white/[0.08] text-center max-h-[90dvh] overflow-y-auto" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#1e3148] rounded-2xl p-8 w-full max-w-md border border-white/[0.08] text-center">
         {/* Step indicator */}
         <div className="flex justify-center gap-1.5 mb-6">
           {steps.map((_, i) => (
@@ -65,14 +65,14 @@ export function OnboardingModal({ onClose }: OnboardingModalProps) {
           {step > 0 && (
             <button
               onClick={() => setStep(step - 1)}
-              className="flex-1 border border-white/20 py-3 rounded-lg text-sm hover:bg-white/5 transition-colors min-h-[44px] touch-manipulation"
+              className="flex-1 border border-white/20 py-2.5 rounded-lg text-sm hover:bg-white/5 transition-colors"
             >
               Back
             </button>
           )}
           <button
             onClick={isLast ? finish : () => setStep(step + 1)}
-            className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg text-sm hover:bg-[#ffd700] transition-colors min-h-[44px] touch-manipulation"
+            className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-2.5 rounded-lg text-sm hover:bg-[#ffd700] transition-colors"
           >
             {isLast ? 'Get Started' : 'Next'}
           </button>

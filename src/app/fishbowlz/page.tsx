@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -58,7 +59,7 @@ function timeUntil(dateStr: string): string {
 
 export default function FishbowlzPage() {
   const router = useRouter();
-  const { user, loading: authLoading, login, authenticated, authFetch } = useAuth();
+  const { user, loading: authLoading, authFetch } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -76,7 +77,7 @@ export default function FishbowlzPage() {
   const [tokenGateMinBalance, setTokenGateMinBalance] = useState('1');
 
   useEffect(() => {
-    fetch('/api/fishbowlz/rooms')
+    authFetch('/api/fishbowlz/rooms')
       .then(r => r.json())
       .then(d => {
         const parsed = (d.rooms || []).map((r: FishbowlRoom & Record<string, unknown>) => ({
@@ -124,40 +125,23 @@ export default function FishbowlzPage() {
   return (
     <div className="min-h-screen bg-[#0a1628] text-white">
       {/* Header */}
-      <div className="border-b border-white/5 px-4 sm:px-6 py-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-2xl hidden sm:block">🐟</span>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">FISHBOWLZ</h1>
-            <p className="text-[11px] text-gray-500 tracking-wide uppercase">Persistent Audio Rooms</p>
-          </div>
+      <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#f5a623]">FISHBOWLZ</h1>
+          <p className="text-xs sm:text-sm text-gray-400">Persistent async fishbowl audio spaces</p>
         </div>
-        <div className="flex items-center gap-2">
-          {authenticated ? (
-            <>
-              <span className="text-xs text-gray-400 hidden sm:block">@{user?.username}</span>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="bg-[#f5a623] text-[#0a1628] font-semibold px-5 py-2.5 rounded-full hover:bg-[#d4941f] transition-all hover:shadow-[0_0_20px_rgba(245,166,35,0.2)] text-sm min-h-[44px]"
-              >
-                + Create
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => login()}
-              className="bg-[#f5a623] text-[#0a1628] font-semibold px-5 py-2.5 rounded-full hover:bg-[#d4941f] transition-all text-sm min-h-[44px]"
-            >
-              Sign In
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="bg-[#f5a623] text-[#0a1628] font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors text-sm sm:text-base min-h-[44px]"
+        >
+          + Create
+        </button>
       </div>
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-[#1a2a4a] rounded-t-2xl sm:rounded-xl p-5 sm:p-6 w-full max-w-md border border-white/10 max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a2a4a] rounded-xl p-5 sm:p-6 w-full max-w-md border border-white/10 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Create Fishbowl</h2>
             <input
               type="text"
@@ -197,7 +181,7 @@ export default function FishbowlzPage() {
                     key={opt.value}
                     type="button"
                     onClick={() => setRotationTimer(opt.value)}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors min-h-[44px] touch-manipulation ${
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
                       rotationTimer === opt.value
                         ? 'bg-[#f5a623] text-[#0a1628]'
                         : 'bg-[#0a1628] border border-white/20 text-gray-400 hover:text-white'
@@ -307,15 +291,15 @@ export default function FishbowlzPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={authenticated ? handleCreate : () => login()}
-                disabled={authenticated ? !title.trim() : false}
-                className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px] touch-manipulation"
+                onClick={handleCreate}
+                disabled={!title.trim() || !user}
+                className="flex-1 bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50"
               >
-                {authenticated ? (scheduleDate ? 'Schedule' : 'Create') : 'Sign in to Create'}
+                {user ? (scheduleDate ? 'Schedule' : 'Create') : 'Sign in first'}
               </button>
               <button
                 onClick={() => setShowCreate(false)}
-                className="px-6 py-3 border border-white/20 rounded-lg hover:bg-white/5 min-h-[44px] touch-manipulation"
+                className="px-6 py-3 border border-white/20 rounded-lg hover:bg-white/5"
               >
                 Cancel
               </button>
@@ -325,7 +309,7 @@ export default function FishbowlzPage() {
       )}
 
       {/* Room List */}
-      <div className="p-4 sm:p-6 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="p-4 sm:p-6">
         {loading ? (
           <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -387,7 +371,7 @@ export default function FishbowlzPage() {
                   <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center gap-1.5">
                       {room.host_pfp ? (
-                        <img src={room.host_pfp} alt="" className="w-4 h-4 rounded-full" />
+                        <Image src={room.host_pfp || '/logo.png'} alt="" width={16} height={16} className="w-4 h-4 rounded-full" unoptimized />
                       ) : (
                         <div className="w-4 h-4 rounded-full bg-gray-600 flex items-center justify-center text-[8px] text-gray-400">
                           {room.host_username[0]?.toUpperCase()}

@@ -59,7 +59,7 @@ export function TipButton({ speakerFid, speakerUsername, roomId }: TipButtonProp
     <div className="relative">
       <button
         onClick={() => setShowAmounts(!showAmounts)}
-        className={`text-[10px] px-2 py-1 rounded transition-colors min-h-[32px] touch-manipulation ${
+        className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
           tipped
             ? 'text-green-400'
             : 'text-gray-500 hover:text-[#f5a623]'
@@ -72,17 +72,17 @@ export function TipButton({ speakerFid, speakerUsername, roomId }: TipButtonProp
       {showAmounts && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowAmounts(false)} />
-          <div className="absolute bottom-full right-0 mb-1 z-50 bg-[#1a2a4a] border border-white/10 rounded-lg p-2 shadow-xl min-w-[120px]">
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-50 bg-[#1a2a4a] border border-white/10 rounded-lg p-2 shadow-xl">
             <div className="flex gap-1">
               {TIP_AMOUNTS.map((tip) => (
                 <button
                   key={tip.value}
                   onClick={() => sendTip(tip.value)}
                   disabled={sending}
-                  className="flex flex-col items-center px-3 py-2 rounded hover:bg-white/10 transition-colors disabled:opacity-50 min-h-[44px] touch-manipulation"
+                  className="flex flex-col items-center px-2 py-1.5 rounded hover:bg-white/10 transition-colors disabled:opacity-50"
                 >
-                  <span className="text-base">{tip.emoji}</span>
-                  <span className="text-[9px] text-gray-400">{tip.label}</span>
+                  <span className="text-sm">{tip.emoji}</span>
+                  <span className="text-[9px] text-gray-400">{tip.label} ETH</span>
                 </button>
               ))}
             </div>
