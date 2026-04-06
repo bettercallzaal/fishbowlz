@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { getIronSession, IronSession } from 'iron-session';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { SessionData } from '@/types';
 import { ENV } from '@/lib/env';
 import { communityConfig } from '@/../community.config';
@@ -61,8 +61,7 @@ export const getSessionData = cache(async (): Promise<SessionData | null> => {
     }
 
     // 2. Try Authorization header (for client-side fetch with Privy access token)
-    // Note: headers() is available in Next.js App Router API routes
-    const headerStore = await import('next/headers').then(m => m.headers());
+    const headerStore = await headers();
     const authHeader = headerStore.get('authorization');
     if (authHeader) {
       const privyData = await verifyPrivyToken(authHeader);
