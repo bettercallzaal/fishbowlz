@@ -58,7 +58,7 @@ function timeUntil(dateStr: string): string {
 
 export default function FishbowlzPage() {
   const router = useRouter();
-  const { user, loading: authLoading, login, authenticated } = useAuth();
+  const { user, loading: authLoading, login, authenticated, authFetch } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -97,7 +97,7 @@ export default function FishbowlzPage() {
       ? new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
       : undefined;
 
-    const res = await fetch('/api/fishbowlz/rooms', {
+    const res = await authFetch('/api/fishbowlz/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

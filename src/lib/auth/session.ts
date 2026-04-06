@@ -37,42 +37,68 @@ export async function getSession(): Promise<IronSession<SessionPayload>> {
 }
 
 export const getSessionData = cache(async (): Promise<SessionData | null> => {
-  const cookieStore = await cookies();
+  try {
+    const cookieStore = await cookies();
 
-  // 1. Try Privy identity token cookie (Privy sets 'privy-id-token' automatically)
-  const privyTokenCookie = cookieStore.get('privy-id-token');
-  if (privyTokenCookie?.value) {
-    const privyData = await verifyPrivyToken(`Bearer ${privyTokenCookie.value}`);
-    if (privyData) {
-      return {
-        fid: privyData.fid,
-        walletAddress: null,
-        authMethod: 'farcaster',
-        username: privyData.username,
-        displayName: privyData.username,
-        pfpUrl: '',
-        signerUuid: null,
-        isAdmin: ADMIN_FIDS.includes(privyData.fid) || privyData.isAdmin,
-        authenticated: true,
-      };
+    // 1. Try Privy identity token cookie
+    // Privy sets 'privy-id-token' or 'privy-token' depending on config
+    const privyTokenCookie = cookieStore.get('privy-id-token') || cookieStore.get('privy-token');
+    if (privyTokenCookie?.value) {
+      const privyData = await verifyPrivyToken(`Bearer ${privyTokenCookie.value}`);
+      if (privyData) {
+        return {
+          fid: privyData.fid,
+          walletAddress: null,
+          authMethod: 'farcaster',
+          username: privyData.username,
+          displayName: privyData.username,
+          pfpUrl: '',
+          signerUuid: null,
+          isAdmin: ADMIN_FIDS.includes(privyData.fid) || privyData.isAdmin,
+          authenticated: true,
+        };
+      }
     }
-  }
 
-  // 2. Fall back to iron-session
-  const session = await getSession();
-  // Valid session: has either FID or wallet address
-  if (!session.fid && !session.walletAddress) return null;
-  return {
-    fid: session.fid || 0,
-    walletAddress: session.walletAddress || null,
-    authMethod: session.authMethod || 'farcaster',
-    username: session.username || '',
-    displayName: session.displayName || '',
-    pfpUrl: session.pfpUrl || '',
-    signerUuid: session.signerUuid || null,
-    isAdmin: session.isAdmin || false,
-    authenticated: true,
-  };
+    // 2. Try Authorization header (for client-side fetch with Privy access token)
+    // Note: headers() is available in Next.js App Router API routes
+    const headerStore = await import('next/headers').then(m => m.headers());
+    const authHeader = headerStore.get('authorization');
+    if (authHeader) {
+      const privyData = await verifyPrivyToken(authHeader);
+      if (privyData) {
+        return {
+          fid: privyData.fid,
+          walletAddress: null,
+          authMethod: 'farcaster',
+          username: privyData.username,
+          displayName: privyData.username,
+          pfpUrl: '',
+          signerUuid: null,
+          isAdmin: ADMIN_FIDS.includes(privyData.fid) || privyData.isAdmin,
+          authenticated: true,
+        };
+      }
+    }
+
+    // 3. Fall back to iron-session
+    const session = await getSession();
+    if (!session.fid && !session.walletAddress) return null;
+    return {
+      fid: session.fid || 0,
+      walletAddress: session.walletAddress || null,
+      authMethod: session.authMethod || 'farcaster',
+      username: session.username || '',
+      displayName: session.displayName || '',
+      pfpUrl: session.pfpUrl || '',
+      signerUuid: session.signerUuid || null,
+      isAdmin: session.isAdmin || false,
+      authenticated: true,
+    };
+  } catch {
+    // Auth check failed entirely — return null (not authenticated)
+    return null;
+  }
 });
 
 export async function saveSession(data: {

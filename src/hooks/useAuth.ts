@@ -26,7 +26,7 @@ function hashCode(str: string): number {
 }
 
 function useAuthWithPrivy() {
-  const { user, ready, authenticated, login, logout: privyLogout } = usePrivy();
+  const { user, ready, authenticated, login, logout: privyLogout, getAccessToken } = usePrivy();
 
   const fishbowlUser: FishbowlUser | null = (() => {
     if (!user || !authenticated) return null;
@@ -67,12 +67,24 @@ function useAuthWithPrivy() {
     window.location.href = '/';
   };
 
+  /** Helper to make authenticated API calls with Privy token */
+  const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const token = await getAccessToken();
+    const headers = new Headers(options.headers);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    return fetch(url, { ...options, headers });
+  };
+
   return {
     user: fishbowlUser,
     loading: !ready,
     authenticated,
     login,
     logout,
+    getAccessToken,
+    authFetch,
     privyUser: user,
   };
 }
@@ -84,6 +96,8 @@ function useAuthNoOp() {
     authenticated: false,
     login: NO_OP,
     logout: NO_OP,
+    getAccessToken: async () => null as string | null,
+    authFetch: (url: string, options?: RequestInit) => fetch(url, options),
     privyUser: null,
   };
 }
