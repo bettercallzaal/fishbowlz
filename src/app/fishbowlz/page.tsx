@@ -116,12 +116,15 @@ export default function FishbowlzPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#0a1628] via-[#0a1628] to-[#0d1f3a] text-white">
       {/* Header */}
-      <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#f5a623]">FISHBOWLZ</h1>
-          <p className="text-xs sm:text-sm text-gray-400">Persistent async fishbowl audio spaces</p>
+      <div className="border-b border-white/5 px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🐟</span>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">FISHBOWLZ</h1>
+            <p className="text-[11px] text-gray-500 tracking-wide uppercase">Persistent Audio Rooms</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {!authLoading && (
@@ -135,7 +138,7 @@ export default function FishbowlzPage() {
                 </div>
                 <button
                   onClick={logout}
-                  className="text-xs text-gray-500 hover:text-white border border-white/10 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                  className="text-xs text-gray-500 hover:text-white border border-white/10 px-2 sm:px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors"
                 >
                   Sign out
                 </button>
@@ -143,7 +146,7 @@ export default function FishbowlzPage() {
             ) : (
               <button
                 onClick={login}
-                className="text-sm text-[#f5a623] border border-[#f5a623]/40 hover:bg-[#f5a623]/10 px-3 py-1.5 rounded-lg transition-colors min-h-[36px]"
+                className="text-sm text-[#f5a623] border border-[#f5a623]/40 hover:bg-[#f5a623]/10 px-4 py-1.5 rounded-full transition-colors min-h-[36px]"
               >
                 Sign in
               </button>
@@ -154,7 +157,7 @@ export default function FishbowlzPage() {
               if (!authenticated) { login(); return; }
               setShowCreate(true);
             }}
-            className="bg-[#f5a623] text-[#0a1628] font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors text-sm sm:text-base min-h-[44px]"
+            className="bg-[#f5a623] text-[#0a1628] font-semibold px-5 sm:px-6 py-2.5 rounded-full hover:bg-[#d4941f] transition-all hover:shadow-[0_0_20px_rgba(245,166,35,0.2)] text-sm min-h-[44px]"
           >
             + Create
           </button>
@@ -310,7 +313,7 @@ export default function FishbowlzPage() {
           <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {rooms.map(room => (
               <Link key={room.id} href={`/fishbowlz/${room.slug || room.id}`}>
-                <div className={`bg-[#1a2a4a] rounded-xl p-5 border border-white/10 transition-colors cursor-pointer ${
+                <div className={`bg-[#1a2a4a] rounded-xl p-5 border border-white/5 transition-colors cursor-pointer ${
                   room.state === 'active'
                     ? 'hover:border-[#f5a623]/50'
                     : room.state === 'scheduled'
@@ -351,7 +354,7 @@ export default function FishbowlzPage() {
                       <span>👥 {room.current_listeners?.length || 0} listening</span>
                     </div>
                   )}
-                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-gray-500">
+                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center gap-1.5">
                       {room.host_pfp ? (
                         <img src={room.host_pfp} alt="" className="w-4 h-4 rounded-full" />
