@@ -386,7 +386,7 @@ function FishbowlRoomPageInner() {
       {/* Header */}
       <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.push('/fishbowlz')} className="text-gray-400 hover:text-white shrink-0 p-1">
+          <button onClick={() => router.push('/fishbowlz')} className="text-gray-400 hover:text-white shrink-0 p-2 -ml-1 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation">
             ←
           </button>
           <div className="min-w-0">
@@ -394,22 +394,23 @@ function FishbowlRoomPageInner() {
             <p className="text-xs sm:text-sm text-gray-400">by @{room.host_username}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={copyShareLink}
-            className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors"
+            className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors min-h-[36px] touch-manipulation"
             title="Copy room link"
           >
-            {copied ? '✓ Copied' : '🔗 Share'}
+            {copied ? '✓' : '🔗'}
+            <span className="hidden sm:inline"> {copied ? 'Copied' : 'Share'}</span>
           </button>
           {room.state === 'ended' && (
             <a
               href={`/api/fishbowlz/export?roomId=${room.id}`}
               download
-              className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors"
+              className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors min-h-[36px] flex items-center touch-manipulation"
               title="Download transcript"
             >
-              📥 Export
+              📥<span className="hidden sm:inline"> Export</span>
             </a>
           )}
           <span className={`text-xs px-2 py-1 rounded-full ${
@@ -419,13 +420,13 @@ function FishbowlRoomPageInner() {
           }`}>
             {room.state}
           </span>
-          <span className="text-xs text-gray-500">🔴 {room.hot_seat_count} seats</span>
+          <span className="text-xs text-gray-500 hidden sm:block">🔴 {room.hot_seat_count} seats</span>
           {isHost && room.state === 'active' && (
             <button
               onClick={() => setShowEndConfirm(true)}
-              className="text-xs px-2 py-1 rounded-full bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600/30 transition-colors"
+              className="text-xs px-2 py-1 rounded-full bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600/30 transition-colors min-h-[36px] touch-manipulation"
             >
-              End Room
+              End
             </button>
           )}
         </div>
@@ -514,7 +515,7 @@ function FishbowlRoomPageInner() {
           )}
 
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">🔥 Hot Seat</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 [&>*]:min-w-0">
             {Array.from({ length: room.hot_seat_count }).map((_, i) => {
               const speaker = room.current_speakers?.[i];
               return (
@@ -717,7 +718,7 @@ function FishbowlRoomPageInner() {
         </div>
 
         {/* Sidebar — Listeners + Transcript + Chat + Reactions */}
-        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col max-h-[50vh] lg:max-h-none">
+        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col max-h-[50dvh] lg:max-h-none">
           {/* Listeners */}
           <div className="p-4 border-b border-white/10">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -819,19 +820,19 @@ function FishbowlRoomPageInner() {
 
       {showEndConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a2a4a] rounded-xl p-6 w-full max-w-sm border border-white/10">
+          <div className="bg-[#1a2a4a] rounded-xl p-6 w-full max-w-sm border border-white/10 mx-4">
             <h2 className="text-lg font-bold mb-2">End this fishbowl?</h2>
             <p className="text-sm text-gray-400 mb-4">This will disconnect all participants and close the room. Transcripts are preserved.</p>
             <div className="flex gap-3">
               <button
                 onClick={endRoom}
-                className="flex-1 bg-red-600 text-white font-semibold py-2.5 rounded-lg hover:bg-red-700 transition-colors"
+                className="flex-1 bg-red-600 text-white font-semibold py-3 rounded-lg hover:bg-red-700 transition-colors min-h-[44px] touch-manipulation"
               >
                 End Room
               </button>
               <button
                 onClick={() => setShowEndConfirm(false)}
-                className="flex-1 border border-white/20 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                className="flex-1 border border-white/20 py-3 rounded-lg hover:bg-white/5 transition-colors min-h-[44px] touch-manipulation"
               >
                 Cancel
               </button>
