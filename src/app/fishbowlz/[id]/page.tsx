@@ -10,6 +10,7 @@ import { TipButton } from '@/components/fishbowlz/TipButton';
 import { useToast, ToastProvider } from '@/components/ui/Toast';
 import dynamic from 'next/dynamic';
 import { ShareModal } from '@/components/shared/ShareModal';
+import { getSupabaseBrowser } from '@/lib/db/supabase';
 
 function parseJsonb<T>(value: unknown, fallback: T): T {
   if (typeof value === 'string') {
@@ -199,21 +200,126 @@ function FishbowlRoomPageInner() {
     }
   }, [room?.id]);
 
+  // Initial fetch + Realtime subscription for room changes
   useEffect(() => {
     if (authLoading) return;
     if (!roomId) return;
 
+    // Initial fetch
     fetchRoom();
-    fetchTranscripts();
 
-    const interval = setInterval(fetchRoom, 5000);
-    const transcriptInterval = setInterval(fetchTranscripts, 10000);
+    const supabase = getSupabaseBrowser();
+
+    // Subscribe to room changes via Realtime.
+    // roomId from URL params may be a slug, so we filter on both id and slug columns.
+    // Supabase Realtime only supports one filter per subscription, so we use two channels.
+    const channelById = supabase
+      .channel(`fishbowl-room-id-${roomId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'fishbowl_rooms',
+        filter: `id=eq.${roomId}`,
+      }, (payload) => {
+        if (payload.new) {
+          const data = payload.new as Record<string, unknown>;
+          data.current_speakers = parseJsonb(data.current_speakers, []);
+          data.current_listeners = parseJsonb(data.current_listeners, []);
+          data.hand_raises = parseJsonb(data.hand_raises, []);
+          if (data.state === 'ended') {
+            setAudioJoined(false);
+            setRoom((prev) => {
+              if (prev && prev.state === 'active') {
+                const wasParticipating =
+                  prev.current_speakers?.some((s) => s.fid === user?.fid) ||
+                  prev.current_listeners?.some((l) => l.fid === user?.fid);
+                if (wasParticipating) {
+                  endedRoomRef.current = data as unknown as FishbowlRoom;
+                  setShowEndedOverlay(true);
+                }
+              }
+              return data as unknown as FishbowlRoom;
+            });
+          } else {
+            setRoom(data as unknown as FishbowlRoom);
+          }
+        }
+      })
+      .subscribe();
+
+    const channelBySlug = supabase
+      .channel(`fishbowl-room-slug-${roomId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'fishbowl_rooms',
+        filter: `slug=eq.${roomId}`,
+      }, (payload) => {
+        if (payload.new) {
+          const data = payload.new as Record<string, unknown>;
+          data.current_speakers = parseJsonb(data.current_speakers, []);
+          data.current_listeners = parseJsonb(data.current_listeners, []);
+          data.hand_raises = parseJsonb(data.hand_raises, []);
+          if (data.state === 'ended') {
+            setAudioJoined(false);
+            setRoom((prev) => {
+              if (prev && prev.state === 'active') {
+                const wasParticipating =
+                  prev.current_speakers?.some((s) => s.fid === user?.fid) ||
+                  prev.current_listeners?.some((l) => l.fid === user?.fid);
+                if (wasParticipating) {
+                  endedRoomRef.current = data as unknown as FishbowlRoom;
+                  setShowEndedOverlay(true);
+                }
+              }
+              return data as unknown as FishbowlRoom;
+            });
+          } else {
+            setRoom(data as unknown as FishbowlRoom);
+          }
+        }
+      })
+      .subscribe();
+
+    // Fallback poll every 30s in case realtime misses something
+    const fallback = setInterval(fetchRoom, 30000);
 
     return () => {
-      clearInterval(interval);
-      clearInterval(transcriptInterval);
+      supabase.removeChannel(channelById);
+      supabase.removeChannel(channelBySlug);
+      clearInterval(fallback);
     };
-  }, [roomId, authLoading, fetchRoom, fetchTranscripts]);
+  }, [roomId, authLoading, fetchRoom, user?.fid]);
+
+  // Realtime subscription for transcript inserts
+  useEffect(() => {
+    if (authLoading) return;
+    if (!room?.id) return;
+    if (room.state === 'ended') return;
+
+    // Initial fetch
+    fetchTranscripts();
+
+    const supabase = getSupabaseBrowser();
+
+    const channel = supabase
+      .channel(`fishbowl-transcripts-${room.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'fishbowl_transcripts',
+        filter: `room_id=eq.${room.id}`,
+      }, (payload) => {
+        if (payload.new) {
+          setTranscripts(prev => [...prev, payload.new as TranscriptSegment]);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [room?.id, room?.state, authLoading, fetchTranscripts]);
 
   // Heartbeat: keep user presence alive (every 45s)
   useEffect(() => {
