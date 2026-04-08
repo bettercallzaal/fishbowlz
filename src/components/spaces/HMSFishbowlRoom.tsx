@@ -25,6 +25,7 @@ interface HMSFishbowlRoomProps {
   isHost?: boolean;
   onLeave: () => void;
   authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
+  participantCount?: number;
 }
 
 /** Renders a video element for a given track ID using the 100ms useVideo hook */
@@ -118,7 +119,7 @@ function ScreenShareView({ peerId, peerName }: { peerId: string; peerName: strin
   );
 }
 
-function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch }: HMSFishbowlRoomProps) {
+function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch, participantCount }: HMSFishbowlRoomProps) {
   const hmsActions = useHMSActions();
   // Stable reference to avoid re-triggering effects when authFetch changes identity
   const apiFetchRef = useRef(authFetch || fetch);
@@ -328,7 +329,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f5a623]" />
           </span>
           <span className="text-white text-sm font-medium">Live</span>
-          <span className="text-gray-500 text-xs">{peers.length} in room</span>
+          <span className="text-gray-500 text-xs">{participantCount ?? peers.length} in room</span>
         </div>
         <div className="flex gap-2">
           {(isHost || role === 'speaker') && (

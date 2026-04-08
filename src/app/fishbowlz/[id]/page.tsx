@@ -765,6 +765,7 @@ function FishbowlRoomPageInner() {
                     isHost={isHost}
                     onLeave={() => setAudioJoined(false)}
                     authFetch={authFetch}
+                    participantCount={(room.current_speakers?.length || 0) + (room.current_listeners?.length || 0)}
                   />
                 </div>
               )}
