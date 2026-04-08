@@ -64,6 +64,16 @@ export default function FishbowlzPage() {
   const { user, loading: authLoading } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+
+  const filteredRooms = rooms.filter(room => {
+    if (filter === 'all') return true;
+    if (filter === 'active') return room.state === 'active';
+    if (filter === 'scheduled') return room.state === 'scheduled';
+    if (filter === 'ended') return room.state === 'ended';
+    if (filter === 'gated') return room.gate_type && room.gate_type !== 'open';
+    return true;
+  });
   const [showCreate, setShowCreate] = useState(false);
   const { show: showOnboarding, dismiss: dismissOnboarding } = useShowOnboarding();
   const [title, setTitle] = useState('');
@@ -332,6 +342,29 @@ export default function FishbowlzPage() {
         </div>
       )}
 
+      {/* Filters */}
+      <div className="px-4 sm:px-6 pt-4 flex gap-2 overflow-x-auto no-scrollbar">
+        {[
+          { value: 'all', label: 'All' },
+          { value: 'active', label: '🔴 Live' },
+          { value: 'scheduled', label: '📅 Scheduled' },
+          { value: 'ended', label: '📝 Ended' },
+          { value: 'gated', label: '🔒 Gated' },
+        ].map(f => (
+          <button
+            key={f.value}
+            onClick={() => setFilter(f.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              filter === f.value
+                ? 'bg-[#f5a623] text-[#0a1628]'
+                : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {/* Room List */}
       <div className="p-4 sm:p-6">
         {loading ? (
@@ -340,11 +373,11 @@ export default function FishbowlzPage() {
               <RoomCardSkeleton key={i} />
             ))}
           </div>
-        ) : rooms.length === 0 ? (
+        ) : filteredRooms.length === 0 ? (
           <EmptyState onCreateRoom={() => setShowCreate(true)} />
         ) : (
           <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {rooms.map(room => (
+            {filteredRooms.map(room => (
               <Link key={room.id} href={`/fishbowlz/${room.slug || room.id}`}>
                 <div className={`bg-[#1a2a4a] rounded-xl p-3 sm:p-5 border border-white/10 transition-colors cursor-pointer ${
                   room.state === 'active'
