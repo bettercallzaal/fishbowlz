@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const { type, title, description, page, browser, screenshot } = parsed.data;
 
     const githubToken = process.env.GITHUB_TOKEN;
-    const repo = process.env.GITHUB_FEEDBACK_REPO || 'zaalpanthaki/zao-os';
+    const repo = process.env.GITHUB_FEEDBACK_REPO || 'bettercallzaal/fishbowlz';
     if (!githubToken) {
       console.error('GITHUB_TOKEN not configured');
       return NextResponse.json({ error: 'Feedback system not configured' }, { status: 503 });
