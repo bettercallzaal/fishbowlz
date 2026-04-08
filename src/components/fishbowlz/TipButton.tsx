@@ -13,11 +13,9 @@ interface TipButtonProps {
   speakerFid: number;
   speakerUsername: string;
   roomId: string;
-  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function TipButton({ speakerFid, speakerUsername, roomId, authFetch }: TipButtonProps) {
-  const apiFetch = authFetch || fetch;
+export function TipButton({ speakerFid, speakerUsername, roomId }: TipButtonProps) {
   const { user } = useAuth();
   const [showAmounts, setShowAmounts] = useState(false);
   const [tipped, setTipped] = useState(false);
@@ -28,7 +26,7 @@ export function TipButton({ speakerFid, speakerUsername, roomId, authFetch }: Ti
     setSending(true);
     try {
       // Log tip event to Supabase (wallet transfer will be added when Privy wallets are wired)
-      await apiFetch('/api/fishbowlz/events', {
+      await fetch('/api/fishbowlz/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,12 +59,11 @@ export function TipButton({ speakerFid, speakerUsername, roomId, authFetch }: Ti
     <div className="relative">
       <button
         onClick={() => setShowAmounts(!showAmounts)}
-        className={`text-xs px-2 py-1 min-h-[32px] rounded transition-colors ${
+        className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
           tipped
             ? 'text-green-400'
             : 'text-gray-500 hover:text-[#f5a623]'
         }`}
-        aria-label={tipped ? `Tipped ${speakerUsername}` : `Tip ${speakerUsername}`}
         title={`Tip @${speakerUsername}`}
       >
         {tipped ? '✓ Tipped' : '💰 Tip'}

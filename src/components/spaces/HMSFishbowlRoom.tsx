@@ -5,17 +5,10 @@ import {
   HMSRoomProvider,
   useHMSActions,
   useHMSStore,
-  useVideo,
-  useScreenShare,
   selectIsConnectedToRoom,
-  selectRoomState,
-  HMSRoomState,
   selectPeers,
   selectIsPeerAudioEnabled,
   selectIsLocalAudioEnabled,
-  selectIsLocalVideoEnabled,
-  selectVideoTrackByPeerID,
-  selectScreenShareByPeerID,
 } from '@100mslive/react-sdk';
 
 interface HMSFishbowlRoomProps {
@@ -26,38 +19,6 @@ interface HMSFishbowlRoomProps {
   role: 'speaker' | 'listener';
   isHost?: boolean;
   onLeave: () => void;
-  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
-  participantCount?: number;
-  guestMode?: boolean;
-}
-
-/** Renders a video element for a given track ID using the 100ms useVideo hook */
-function VideoTile({ trackId, isLocal }: { trackId: string; isLocal?: boolean }) {
-  const { videoRef } = useVideo({ trackId });
-  return (
-    <video
-      ref={videoRef}
-      autoPlay
-      muted={isLocal}
-      playsInline
-      className="w-full h-full object-cover rounded-lg"
-      style={{ transform: isLocal ? 'scaleX(-1)' : undefined }}
-    />
-  );
-}
-
-/** Renders a screen share track */
-function ScreenShareTile({ trackId }: { trackId: string }) {
-  const { videoRef } = useVideo({ trackId });
-  return (
-    <video
-      ref={videoRef}
-      autoPlay
-      muted
-      playsInline
-      className="w-full h-full object-contain"
-    />
-  );
 }
 
 /** Sub-component to read peer audio state via useHMSStore */
@@ -79,71 +40,13 @@ function PeerAudioIndicator({ peerId, initial }: { peerId: string; initial: stri
   );
 }
 
-/** Peer tile that shows video if enabled, otherwise falls back to audio indicator */
-function PeerTile({ peerId, peerName, isLocal }: { peerId: string; peerName: string; isLocal: boolean }) {
-  const videoTrack = useHMSStore(selectVideoTrackByPeerID(peerId));
-  const initial = (peerName || '?')[0];
-  const hasVideo = videoTrack?.enabled;
-
-  if (hasVideo && videoTrack?.id) {
-    return (
-      <div className="flex flex-col items-center">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-[#f5a623] shadow-[0_0_12px_rgba(245,166,35,0.3)]">
-          <VideoTile trackId={videoTrack.id} isLocal={isLocal} />
-        </div>
-        <span className="text-white text-xs mt-1 truncate max-w-[80px] sm:max-w-[96px]">
-          {peerName} {isLocal && '(You)'}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-center">
-      <PeerAudioIndicator peerId={peerId} initial={initial} />
-      <span className="text-white text-xs mt-1 truncate max-w-[48px] sm:max-w-[60px]">
-        {peerName} {isLocal && '(You)'}
-      </span>
-    </div>
-  );
-}
-
-/** Shows screen share from a peer */
-function ScreenShareView({ peerId, peerName }: { peerId: string; peerName: string }) {
-  const screenShare = useHMSStore(selectScreenShareByPeerID(peerId));
-  if (!screenShare?.id) return null;
-  return (
-    <div className="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-h-[400px] relative">
-      <ScreenShareTile trackId={screenShare.id} />
-      <div className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded text-white">
-        {peerName} is sharing screen
-      </div>
-    </div>
-  );
-}
-
-function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch, participantCount, guestMode }: HMSFishbowlRoomProps) {
+function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave }: HMSFishbowlRoomProps) {
   const hmsActions = useHMSActions();
-  // Stable reference to avoid re-triggering effects when authFetch changes identity
-  const apiFetchRef = useRef(authFetch || fetch);
-  apiFetchRef.current = authFetch || fetch;
-  const apiFetch = useCallback((url: string, options?: RequestInit) => apiFetchRef.current(url, options), []);
   const isConnected = useHMSStore(selectIsConnectedToRoom);
-  const roomState = useHMSStore(selectRoomState);
   const peers = useHMSStore(selectPeers);
   const isLocalAudioEnabled = useHMSStore(selectIsLocalAudioEnabled);
-  const isLocalVideoEnabled = useHMSStore(selectIsLocalVideoEnabled);
-  const {
-    amIScreenSharing,
-    screenSharingPeerId,
-    screenSharingPeerName,
-    toggleScreenShare,
-  } = useScreenShare();
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reconnecting, setReconnecting] = useState(false);
-  const reconnectAttempts = useRef(0);
-  const MAX_RECONNECT_ATTEMPTS = 3;
   const [transcribing, setTranscribing] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
@@ -183,7 +86,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           const text = pendingTextRef.current + ' ' + transcript;
           pendingTextRef.current = '';
           try {
-            await apiFetch('/api/fishbowlz/transcribe', {
+            await fetch('/api/fishbowlz/transcribe', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -212,7 +115,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
 
     recognition.start();
     setTranscribing(true);
-  }, [transcribing, fishbowlRoomId, userFid, userName, role, isHost, apiFetch]);
+  }, [transcribing, fishbowlRoomId, userFid, userName, role, isHost]);
 
   useEffect(() => {
     return () => {
@@ -220,104 +123,40 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     };
   }, []);
 
-  // Capture initial values in refs so the join effect only runs ONCE per mount.
-  // Re-renders from Realtime room updates must NOT cause leave/rejoin.
-  const joinParamsRef = useRef({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, guestMode });
-  // Only update ref on first mount — ignore subsequent prop changes
-
-  // Auto-reconnect when HMS connection drops
   useEffect(() => {
-    if (roomState === HMSRoomState.Reconnecting) {
-      setReconnecting(true);
-      reconnectAttempts.current += 1;
-    } else if (roomState === HMSRoomState.Connected) {
-      if (reconnecting) {
-        setReconnecting(false);
-        reconnectAttempts.current = 0;
-      }
-    } else if (
-      (roomState === HMSRoomState.Disconnected || roomState === HMSRoomState.Failed) &&
-      reconnectAttempts.current > 0
-    ) {
-      // HMS auto-reconnect failed - try manual reconnect
-      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        const rejoin = async () => {
-          try {
-            const { fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host } = joinParamsRef.current;
-            const hmsRole = host ? 'moderator' : r;
-            const roomName = slug ? `fishbowl-${slug}` : undefined;
-            const res = await apiFetch('/api/100ms/token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: String(fid), role: hmsRole, roomName }),
-            });
-            if (res.ok) {
-              const { token } = await res.json();
-              await hmsActions.join({ userName: name, authToken: token });
-            }
-          } catch {
-            // Will retry on next disconnect cycle
-          }
-        };
-        setTimeout(rejoin, 2000 * reconnectAttempts.current);
-      } else {
-        setError('Connection lost. Please rejoin the room.');
-        setReconnecting(false);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- roomState drives this effect
-  }, [roomState]);
-
-  useEffect(() => {
-    const { fishbowlRoomId: roomId, fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host, guestMode: guest } = joinParamsRef.current;
-
-    // For guest mode, fid may be 0 - that's OK
-    if (!roomId || (!fid && !guest)) return;
-
-    let cancelled = false;
     const joinRoom = async () => {
       setJoining(true);
       setError(null);
       try {
-        // In guest mode, always request listener role and use plain fetch (no auth)
-        const hmsRole = guest ? 'listener' : (host ? 'moderator' : r);
-        const roomName = slug ? `fishbowl-${slug}` : undefined;
-        const fetchFn = guest ? fetch : apiFetch;
-        const res = await fetchFn('/api/100ms/token', {
+        const hmsRole = isHost ? 'moderator' : role;
+        const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
+        const res = await fetch('/api/100ms/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: guest ? `guest-${Math.random().toString(36).slice(2, 8)}` : String(fid),
-            role: hmsRole,
-            roomName,
-            ...(guest ? { anonymous: true } : {}),
-          }),
+          body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),
         });
-        if (cancelled) return;
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || `Token request failed (${res.status})`);
         }
         const { token } = await res.json();
-        if (cancelled) return;
-        await hmsActions.join({ userName: name, authToken: token });
+        await hmsActions.join({ userName, authToken: token });
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to connect to audio');
-        }
+        console.error('Failed to join HMS room:', err);
+        setError(err instanceof Error ? err.message : 'Failed to connect to audio');
       } finally {
-        if (!cancelled) setJoining(false);
+        setJoining(false);
       }
     };
 
-    joinRoom();
+    if (fishbowlRoomId && userFid) {
+      joinRoom();
+    }
 
     return () => {
-      cancelled = true;
       hmsActions.leave().catch(() => {});
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount only
-  }, [hmsActions, apiFetch]);
+  }, [fishbowlRoomId, userFid, role, isHost, fishbowlSlug, userName, hmsActions]);
 
   const leaveRoom = async () => {
     await hmsActions.leave();
@@ -327,18 +166,13 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
   const retryJoin = () => {
     setError(null);
     setJoining(true);
-    const hmsRole = guestMode ? 'listener' : (isHost ? 'moderator' : role);
+    // Re-trigger by toggling state — the useEffect will re-run
+    const hmsRole = isHost ? 'moderator' : role;
     const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
-    const fetchFn = guestMode ? fetch : apiFetch;
-    fetchFn('/api/100ms/token', {
+    fetch('/api/100ms/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: guestMode ? `guest-${Math.random().toString(36).slice(2, 8)}` : String(userFid),
-        role: hmsRole,
-        roomName,
-        ...(guestMode ? { anonymous: true } : {}),
-      }),
+      body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -356,16 +190,6 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     await hmsActions.setLocalAudioEnabled(!isLocalAudioEnabled);
   };
 
-  const toggleVideo = async () => {
-    try {
-      await hmsActions.setLocalVideoEnabled(!isLocalVideoEnabled);
-    } catch (err) {
-      console.error('Camera toggle failed:', err);
-      // Most likely the role doesn't have video publish permission
-      alert('Camera is not available. Your role may not have video permission, or camera access was denied.');
-    }
-  };
-
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-3 px-4">
@@ -374,10 +198,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           Check that your browser has microphone permission enabled. If the problem persists, try refreshing the page.
         </p>
         <button
-          onClick={() => {
-            reconnectAttempts.current = 0;
-            retryJoin();
-          }}
+          onClick={retryJoin}
           className="px-4 py-1.5 bg-[#f5a623] text-[#0a1628] rounded-lg text-xs font-medium hover:bg-[#d4941f] transition-colors"
         >
           Retry Connection
@@ -414,11 +235,11 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f5a623] opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f5a623]" />
           </span>
-          <span className="text-white text-sm font-medium">Live</span>
-          <span className="text-gray-500 text-xs">{participantCount ?? peers.length} in room</span>
+          <span className="text-white text-sm font-medium">Live Audio</span>
+          <span className="text-gray-500 text-xs">{peers.length} in room</span>
         </div>
         <div className="flex gap-2">
-          {!guestMode && (isHost || role === 'speaker') && (
+          {(isHost || role === 'speaker') && (
             <button
               onClick={toggleTranscription}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -431,77 +252,62 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
               {transcribing ? '⏹ Live' : '🎤 Transcribe'}
             </button>
           )}
-          {!guestMode && (
-            <>
-              <button
-                onClick={toggleMute}
-                className={`p-2 rounded-full transition-colors ${
-                  isLocalAudioEnabled
-                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
-                    : 'bg-red-500/20 text-red-400'
-                }`}
-                aria-label={isLocalAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
-                title={isLocalAudioEnabled ? 'Mute' : 'Unmute'}
-              >
-                {isLocalAudioEnabled ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5.29"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                )}
-              </button>
-              <button
-                onClick={toggleVideo}
-                className={`p-2 rounded-full transition-colors ${
-                  isLocalVideoEnabled
-                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
-                    : 'bg-red-500/20 text-red-400'
-                }`}
-                aria-label={isLocalVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-                title={isLocalVideoEnabled ? 'Camera off' : 'Camera on'}
-              >
-                {isLocalVideoEnabled ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.66 6H14a2 2 0 0 1 2 2v2.34l1 1L22 8v8"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-                )}
-              </button>
-              {toggleScreenShare && (
-                <button
-                  onClick={() => toggleScreenShare()}
-                  className={`p-2 rounded-full transition-colors ${
-                    amIScreenSharing
-                      ? 'bg-[#f5a623] text-[#0a1628]'
-                      : 'bg-white/10 text-white hover:bg-white/20'
-                  }`}
-                  aria-label={amIScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-                  title={amIScreenSharing ? 'Stop sharing' : 'Share screen'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-                </button>
-              )}
-            </>
-          )}
+          <button
+            onClick={toggleMute}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              isLocalAudioEnabled
+                ? 'bg-[#f5a623]/20 text-[#f5a623]'
+                : 'bg-white/5 text-[#a0aec0]'
+            }`}
+          >
+            {isLocalAudioEnabled ? 'Mute' : 'Unmute'}
+          </button>
           <button
             onClick={leaveRoom}
-            className="px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium"
+            className="px-4 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium"
           >
             Leave
           </button>
         </div>
       </div>
 
-      {/* Reconnecting banner */}
-      {reconnecting && (
-        <div className="px-4 py-2 bg-[#f5a623]/10 border-b border-[#f5a623]/20 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#f5a623] animate-pulse" />
-          <span className="text-xs text-[#f5a623]">Reconnecting to audio...</span>
+      {/* Speakers */}
+      {speakers.length > 0 && (
+        <div className="p-4">
+          <h4 className="text-gray-500 text-xs uppercase tracking-wider mb-3">
+            🔥 Hot Seat ({speakers.length})
+          </h4>
+          <div className="grid grid-cols-4 gap-3">
+            {speakers.map((peer) => (
+              <div key={peer.id} className="flex flex-col items-center">
+                <PeerAudioIndicator peerId={peer.id} initial={(peer.name || '?')[0]} />
+                <span className="text-white text-xs mt-1 truncate max-w-[60px]">
+                  {peer.name} {peer.isLocal && '(You)'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Screen Share */}
-      {screenSharingPeerId && (
-        <div className="p-4">
-          <ScreenShareView peerId={screenSharingPeerId} peerName={screenSharingPeerName || 'Someone'} />
+      {/* Listeners */}
+      {listeners.length > 0 && (
+        <div className="px-4 pb-4">
+          <h4 className="text-gray-500 text-xs uppercase tracking-wider mb-3">
+            👥 Listening ({listeners.length})
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {listeners.map((peer) => (
+              <div key={peer.id} className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full">
+                <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 text-[10px]">
+                  {(peer.name || '?')[0]}
+                </div>
+                <span className="text-gray-400 text-xs">
+                  {peer.name} {peer.isLocal && '(You)'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

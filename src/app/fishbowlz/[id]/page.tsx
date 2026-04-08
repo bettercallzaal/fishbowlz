@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { TranscriptInput } from '@/components/spaces/TranscriptInput';
 import { FishbowlChat } from '@/components/spaces/FishbowlChat';
@@ -10,7 +10,6 @@ import { TipButton } from '@/components/fishbowlz/TipButton';
 import { useToast, ToastProvider } from '@/components/ui/Toast';
 import dynamic from 'next/dynamic';
 import { ShareModal } from '@/components/shared/ShareModal';
-import { getSupabaseBrowser } from '@/lib/db/supabase';
 
 function parseJsonb<T>(value: unknown, fallback: T): T {
   if (typeof value === 'string') {
@@ -44,7 +43,7 @@ function SpeakerTime({ joinedAt }: { joinedAt: string }) {
     return () => clearInterval(interval);
   }, [joinedAt]);
 
-  return <span className="text-xs text-gray-500 font-mono">{elapsed}</span>;
+  return <span className="text-[10px] text-gray-500 font-mono">{elapsed}</span>;
 }
 
 function Countdown({ targetDate }: { targetDate: string }) {
@@ -102,8 +101,6 @@ interface FishbowlRoom {
   hand_raises?: Array<{ fid: number; username: string; joinedAt: string }>;
   audio_source_type: string | null;
   audio_source_url: string | null;
-  gate_type?: string;
-  gate_config?: Record<string, unknown>;
   created_at: string;
   scheduled_at?: string | null;
   ai_summary?: string | null;
@@ -122,10 +119,8 @@ interface TranscriptSegment {
 function FishbowlRoomPageInner() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const roomId = params.id as string;
-  const inviteParam = searchParams.get('invite');
-  const { user, loading: authLoading, authFetch } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [room, setRoom] = useState<FishbowlRoom | null>(null);
@@ -134,7 +129,6 @@ function FishbowlRoomPageInner() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioJoined, setAudioJoined] = useState(false);
-  const [joinedRole, setJoinedRole] = useState<'speaker' | 'listener'>('listener');
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [gateError, setGateError] = useState<{ message: string; details?: string } | null>(null);
@@ -143,36 +137,6 @@ function FishbowlRoomPageInner() {
   const endedRoomRef = useRef<FishbowlRoom | null>(null);
   const [guidanceDismissed, setGuidanceDismissed] = useState(false);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
-  const [showAllTranscripts, setShowAllTranscripts] = useState(false);
-  const [recap, setRecap] = useState<string | null>(null);
-  const [recapLoading, setRecapLoading] = useState(false);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [guestMode, setGuestMode] = useState(false);
-  // Stable guest username so it doesn't change on re-render
-  const guestNameRef = useRef(`Guest-${Math.floor(1000 + Math.random() * 9000)}`);
-
-  // Group consecutive transcript entries from the same speaker
-  const groupedTranscripts = useMemo(() => {
-    if (!transcripts.length) return [];
-    const groups: { speaker: string; role: string; timestamp: string; segments: string[] }[] = [];
-    for (const t of transcripts) {
-      const last = groups[groups.length - 1];
-      if (last && last.speaker === (t.speaker_name || 'Unknown')) {
-        last.segments.push(t.text);
-      } else {
-        groups.push({
-          speaker: t.speaker_name || 'Unknown',
-          role: t.speaker_role || 'speaker',
-          timestamp: t.started_at,
-          segments: [t.text],
-        });
-      }
-    }
-    return groups;
-  }, [transcripts]);
-
-  const visibleGroups = showAllTranscripts ? groupedTranscripts : groupedTranscripts.slice(0, 10);
 
   const isHost = user?.fid === room?.host_fid;
   const isSpeaker = room?.current_speakers?.some((s) => s.fid === user?.fid);
@@ -187,7 +151,7 @@ function FishbowlRoomPageInner() {
 
   const fetchRoom = useCallback(async () => {
     try {
-      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`);
+      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`);
       if (!res.ok) throw new Error('Room not found');
       const data = await res.json();
       // Parse JSONB strings from Supabase
@@ -220,12 +184,12 @@ function FishbowlRoomPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [roomId, user?.fid, authFetch]);
+  }, [roomId, user?.fid]);
 
   const fetchTranscripts = useCallback(async () => {
     if (!room?.id) return;
     try {
-      const res = await authFetch(`/api/fishbowlz/transcripts?roomId=${room.id}&limit=50`);
+      const res = await fetch(`/api/fishbowlz/transcripts?roomId=${room.id}&limit=50`);
       if (res.ok) {
         const data = await res.json();
         setTranscripts(data.transcripts || []);
@@ -233,153 +197,30 @@ function FishbowlRoomPageInner() {
     } catch {
       // Non-critical
     }
-  }, [room?.id, authFetch]);
+  }, [room?.id]);
 
-  const fetchRecap = useCallback(async () => {
-    if (!room?.id) return;
-    setRecapLoading(true);
-    try {
-      const res = await authFetch('/api/fishbowlz/recap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: room.id }),
-      });
-      const data = await res.json();
-      if (data.recap) setRecap(data.recap);
-    } catch {
-      setRecap('Could not generate recap. Try again later.');
-    } finally {
-      setRecapLoading(false);
-    }
-  }, [room?.id, authFetch]);
-
-  // Initial fetch + Realtime subscription for room changes
   useEffect(() => {
     if (authLoading) return;
     if (!roomId) return;
 
-    // Initial fetch
     fetchRoom();
-
-    const supabase = getSupabaseBrowser();
-
-    // Subscribe to room changes via Realtime.
-    // roomId from URL params may be a slug, so we filter on both id and slug columns.
-    // Supabase Realtime only supports one filter per subscription, so we use two channels.
-    const channelById = supabase
-      .channel(`fishbowl-room-id-${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'fishbowl_rooms',
-        filter: `id=eq.${roomId}`,
-      }, (payload) => {
-        if (payload.new) {
-          const data = payload.new as Record<string, unknown>;
-          data.current_speakers = parseJsonb(data.current_speakers, []);
-          data.current_listeners = parseJsonb(data.current_listeners, []);
-          data.hand_raises = parseJsonb(data.hand_raises, []);
-          if (data.state === 'ended') {
-            setAudioJoined(false);
-            setRoom((prev) => {
-              if (prev && prev.state === 'active') {
-                const wasParticipating =
-                  prev.current_speakers?.some((s) => s.fid === user?.fid) ||
-                  prev.current_listeners?.some((l) => l.fid === user?.fid);
-                if (wasParticipating) {
-                  endedRoomRef.current = data as unknown as FishbowlRoom;
-                  setShowEndedOverlay(true);
-                }
-              }
-              return data as unknown as FishbowlRoom;
-            });
-          } else {
-            setRoom(data as unknown as FishbowlRoom);
-          }
-        }
-      })
-      .subscribe();
-
-    const channelBySlug = supabase
-      .channel(`fishbowl-room-slug-${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'fishbowl_rooms',
-        filter: `slug=eq.${roomId}`,
-      }, (payload) => {
-        if (payload.new) {
-          const data = payload.new as Record<string, unknown>;
-          data.current_speakers = parseJsonb(data.current_speakers, []);
-          data.current_listeners = parseJsonb(data.current_listeners, []);
-          data.hand_raises = parseJsonb(data.hand_raises, []);
-          if (data.state === 'ended') {
-            setAudioJoined(false);
-            setRoom((prev) => {
-              if (prev && prev.state === 'active') {
-                const wasParticipating =
-                  prev.current_speakers?.some((s) => s.fid === user?.fid) ||
-                  prev.current_listeners?.some((l) => l.fid === user?.fid);
-                if (wasParticipating) {
-                  endedRoomRef.current = data as unknown as FishbowlRoom;
-                  setShowEndedOverlay(true);
-                }
-              }
-              return data as unknown as FishbowlRoom;
-            });
-          } else {
-            setRoom(data as unknown as FishbowlRoom);
-          }
-        }
-      })
-      .subscribe();
-
-    // Fallback poll every 30s in case realtime misses something
-    const fallback = setInterval(fetchRoom, 30000);
-
-    return () => {
-      supabase.removeChannel(channelById);
-      supabase.removeChannel(channelBySlug);
-      clearInterval(fallback);
-    };
-  }, [roomId, authLoading, fetchRoom, user?.fid]);
-
-  // Realtime subscription for transcript inserts
-  useEffect(() => {
-    if (authLoading) return;
-    if (!room?.id) return;
-    if (room.state === 'ended') return;
-
-    // Initial fetch
     fetchTranscripts();
 
-    const supabase = getSupabaseBrowser();
-
-    const channel = supabase
-      .channel(`fishbowl-transcripts-${room.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'fishbowl_transcripts',
-        filter: `room_id=eq.${room.id}`,
-      }, (payload) => {
-        if (payload.new) {
-          setTranscripts(prev => [...prev, payload.new as TranscriptSegment]);
-        }
-      })
-      .subscribe();
+    const interval = setInterval(fetchRoom, 5000);
+    const transcriptInterval = setInterval(fetchTranscripts, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
+      clearInterval(transcriptInterval);
     };
-  }, [room?.id, room?.state, authLoading, fetchTranscripts]);
+  }, [roomId, authLoading, fetchRoom, fetchTranscripts]);
 
   // Heartbeat: keep user presence alive (every 45s)
   useEffect(() => {
     if (!user || !roomId || (!isSpeaker && !isListener)) return;
 
     const sendHeartbeat = () => {
-      authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+      fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'heartbeat', fid: user.fid }),
@@ -390,7 +231,7 @@ function FishbowlRoomPageInner() {
     const heartbeatInterval = setInterval(sendHeartbeat, 45_000);
 
     return () => clearInterval(heartbeatInterval);
-  }, [user, roomId, isSpeaker, isListener, authFetch]);
+  }, [user, roomId, isSpeaker, isListener]);
 
   // beforeunload: fire a leave request when the tab is closed
   useEffect(() => {
@@ -421,7 +262,7 @@ function FishbowlRoomPageInner() {
       const seatedMs = Date.now() - new Date(oldest.joinedAt).getTime();
       if (seatedMs >= room.rotation_interval_ms!) {
         // Auto-rotate: kick the oldest speaker
-        authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+        fetch(`/api/fishbowlz/rooms/${roomId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'kick_speaker', targetFid: oldest.fid }),
@@ -431,7 +272,7 @@ function FishbowlRoomPageInner() {
 
     const interval = setInterval(checkRotation, 10000); // check every 10s
     return () => clearInterval(interval);
-  }, [isHost, room?.rotation_interval_ms, room?.state, room?.current_speakers, roomId, fetchRoom, authFetch]);
+  }, [isHost, room?.rotation_interval_ms, room?.state, room?.current_speakers, roomId, fetchRoom]);
 
   // Check if guidance was previously dismissed
   useEffect(() => {
@@ -457,7 +298,7 @@ function FishbowlRoomPageInner() {
   }, [showEndedOverlay, endedCountdown, router]);
 
   const endRoom = async () => {
-    const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+    const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'end_room' }),
@@ -471,14 +312,14 @@ function FishbowlRoomPageInner() {
   };
 
   const joinAsSpeaker = async () => {
-    if (!user || joining || audioJoined) return;
+    if (!user || joining) return;
     setJoining(true);
     setGateError(null);
     try {
-      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join_speaker', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
+        body: JSON.stringify({ action: 'join_speaker', fid: user.fid, username: user.username }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -494,7 +335,6 @@ function FishbowlRoomPageInner() {
         return;
       }
       await fetchRoom();
-      setJoinedRole('speaker');
       setAudioJoined(true);
     } finally {
       setJoining(false);
@@ -502,13 +342,13 @@ function FishbowlRoomPageInner() {
   };
 
   const joinAsListener = async () => {
-    if (!user || joining || audioJoined) return;
+    if (!user || joining) return;
     setJoining(true);
     try {
-      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join_listener', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
+        body: JSON.stringify({ action: 'join_listener', fid: user.fid, username: user.username }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -516,7 +356,6 @@ function FishbowlRoomPageInner() {
         return;
       }
       await fetchRoom();
-      setJoinedRole('listener');
       setAudioJoined(true);
     } finally {
       setJoining(false);
@@ -527,7 +366,7 @@ function FishbowlRoomPageInner() {
     if (!user || joining) return;
     setJoining(true);
     try {
-      await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+      await fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'rotate_in', listenerFid: user.fid, listenerUsername: user.username }),
@@ -540,7 +379,7 @@ function FishbowlRoomPageInner() {
 
   const leave = async () => {
     if (!user) return;
-    const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+    const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'leave_speaker', fid: user.fid }),
@@ -552,28 +391,6 @@ function FishbowlRoomPageInner() {
     }
     await fetchRoom();
     setAudioJoined(false);
-  };
-
-  const generateInvite = async () => {
-    if (!room || inviteLoading) return;
-    setInviteLoading(true);
-    try {
-      const res = await authFetch('/api/fishbowlz/invites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: room.id }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setInviteCode(data.code);
-      } else {
-        toast('Failed to generate invite', 'error');
-      }
-    } catch {
-      toast('Failed to generate invite', 'error');
-    } finally {
-      setInviteLoading(false);
-    }
   };
 
   if (loading || authLoading) {
@@ -600,20 +417,11 @@ function FishbowlRoomPageInner() {
       {/* Header */}
       <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.push('/fishbowlz')} className="text-gray-400 hover:text-white shrink-0 p-1" aria-label="Back to rooms">
+          <button onClick={() => router.push('/fishbowlz')} className="text-gray-400 hover:text-white shrink-0 p-1">
             ←
           </button>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold truncate" title={room.title}>{room.title}</h1>
-              {room.gate_type && room.gate_type !== 'open' && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400 shrink-0">
-                  {room.gate_type === 'farcaster' ? 'FC Only' :
-                   room.gate_type === 'invite' ? 'Invite Only' :
-                   room.gate_type === 'token' ? 'Token Gated' : ''}
-                </span>
-              )}
-            </div>
+            <h1 className="text-lg sm:text-xl font-bold truncate">{room.title}</h1>
             <p className="text-xs sm:text-sm text-gray-400">by @{room.host_username}</p>
           </div>
         </div>
@@ -623,17 +431,8 @@ function FishbowlRoomPageInner() {
             className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors"
             title="Share room"
           >
-            Share
+            🔗 Share
           </button>
-          {isHost && room.gate_type === 'invite' && (
-            <button
-              onClick={generateInvite}
-              disabled={inviteLoading}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
-            >
-              {inviteLoading ? '...' : 'Invite'}
-            </button>
-          )}
           {room.state === 'ended' && (
             <a
               href={`/api/fishbowlz/export?roomId=${room.id}`}
@@ -662,31 +461,6 @@ function FishbowlRoomPageInner() {
           )}
         </div>
       </div>
-
-      {inviteCode && (
-        <div className="px-4 sm:px-6 py-2 border-b border-white/10 bg-white/[0.02]">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
-            <span className="text-xs text-gray-400 truncate flex-1">
-              fishbowlz.com/fishbowlz/{room.slug}?invite={inviteCode}
-            </span>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`https://fishbowlz.com/fishbowlz/${room.slug}?invite=${inviteCode}`);
-                toast('Invite link copied!', 'success');
-              }}
-              className="text-xs text-[#f5a623] hover:text-[#d4941f] shrink-0"
-            >
-              Copy
-            </button>
-            <button
-              onClick={() => setInviteCode(null)}
-              className="text-xs text-gray-500 hover:text-gray-300 shrink-0"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
 
       {showGuidance && (
         <div className="bg-[#f5a623]/10 border-b border-[#f5a623]/20 px-4 py-2 flex items-center justify-between gap-2">
@@ -722,7 +496,7 @@ function FishbowlRoomPageInner() {
               {isHost && (
                 <button
                   onClick={async () => {
-                    await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+                    await fetch(`/api/fishbowlz/rooms/${roomId}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'start_room', username: user?.username }),
@@ -756,23 +530,17 @@ function FishbowlRoomPageInner() {
 
           {room.state === 'active' && (
             <>
-              {/* HMS Audio — supports both authenticated users and anonymous guest listeners */}
-              {audioJoined && (user || guestMode) && (
+              {/* HMS Audio */}
+              {audioJoined && user && (
                 <div className="mb-6 rounded-xl overflow-hidden border border-white/10">
                   <HMSFishbowlRoom
                     fishbowlRoomId={room.id}
                     fishbowlSlug={room.slug}
-                    userFid={user?.fid || 0}
-                    userName={user?.displayName || user?.username || guestNameRef.current}
-                    role={joinedRole}
+                    userFid={user.fid}
+                    userName={user.displayName || user.username || 'Anonymous'}
+                    role={isSpeaker ? 'speaker' : 'listener'}
                     isHost={isHost}
-                    onLeave={() => {
-                      setAudioJoined(false);
-                      setGuestMode(false);
-                    }}
-                    authFetch={guestMode ? undefined : authFetch}
-                    participantCount={(room.current_speakers?.length || 0) + (room.current_listeners?.length || 0)}
-                    guestMode={guestMode}
+                    onLeave={() => setAudioJoined(false)}
                   />
                 </div>
               )}
@@ -785,7 +553,6 @@ function FishbowlRoomPageInner() {
                     roomId={room.id}
                     speakerRole={isHost ? 'host' : 'speaker'}
                     onTranscriptAdded={() => fetchTranscripts()}
-                    authFetch={authFetch}
                   />
                 </div>
               )}
@@ -793,92 +560,67 @@ function FishbowlRoomPageInner() {
           )}
 
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">🔥 Hot Seat</h2>
-          {(() => {
-            const occupiedSeats = room.current_speakers || [];
-            const emptyCount = room.hot_seat_count - occupiedSeats.length;
-            const maxEmptyShown = occupiedSeats.length > 0 ? 2 : 0;
-            const emptyToShow = Math.min(emptyCount, maxEmptyShown);
-            const remainingEmpty = emptyCount - emptyToShow;
-
-            // No speakers at all - show compact placeholder
-            if (occupiedSeats.length === 0) {
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Array.from({ length: room.hot_seat_count }).map((_, i) => {
+              const speaker = room.current_speakers?.[i];
               return (
-                <div className="text-center py-6 text-gray-400 bg-[#1a2a4a] rounded-xl border border-dashed border-white/20">
-                  <p className="text-2xl mb-2">{'\u{1FA91}'}</p>
-                  <p className="text-sm">{room.hot_seat_count} seats available</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {room.state === 'scheduled' ? 'Starts soon' : 'Sign in to take a seat'}
-                  </p>
-                </div>
-              );
-            }
-
-            // Has speakers - show occupied + up to 2 empty placeholders
-            return (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {occupiedSeats.map((speaker) => (
-                    <div
-                      key={`speaker-${speaker.fid}`}
-                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-[#f5a623]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 flex items-center justify-center text-[#f5a623] font-bold text-sm">
-                          {speaker.username[0].toUpperCase()}
+                <div
+                  key={i}
+                  className={`rounded-xl p-4 border-2 transition-colors ${
+                    speaker
+                      ? 'bg-[#1a2a4a] border-[#f5a623]'
+                      : 'bg-[#0f1d35] border-dashed border-white/20'
+                  }`}
+                >
+                  {speaker ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 flex items-center justify-center text-[#f5a623] font-bold text-sm">
+                        {speaker.username[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">{speaker.username}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs text-gray-400">🔥 Hot seat</p>
+                          <SpeakerTime joinedAt={speaker.joinedAt} />
                         </div>
-                        <div>
-                          <p className="font-semibold text-sm">{speaker.username}</p>
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-xs text-gray-400">🔥 Hot seat</p>
-                            <SpeakerTime joinedAt={speaker.joinedAt} />
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {isHost && speaker.fid !== user?.fid && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
-                                  });
-                                  if (res.ok) {
-                                    toast(`Moved @${speaker.username} to listeners`, 'info');
-                                    await fetchRoom();
-                                  }
-                                }}
-                                className="text-[10px] text-red-400 hover:text-red-300"
-                                title="Move to listeners"
-                              >
-                                kick
-                              </button>
-                            )}
-                            <TipButton
-                              speakerFid={speaker.fid}
-                              speakerUsername={speaker.username}
-                              roomId={room.id}
-                              authFetch={authFetch}
-                            />
-                          </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {isHost && speaker.fid !== user?.fid && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
+                                });
+                                if (res.ok) {
+                                  toast(`Moved @${speaker.username} to listeners`, 'info');
+                                  await fetchRoom();
+                                }
+                              }}
+                              className="text-[10px] text-red-400 hover:text-red-300"
+                              title="Move to listeners"
+                            >
+                              kick
+                            </button>
+                          )}
+                          <TipButton
+                            speakerFid={speaker.fid}
+                            speakerUsername={speaker.username}
+                            roomId={room.id}
+                          />
                         </div>
                       </div>
                     </div>
-                  ))}
-                  {Array.from({ length: emptyToShow }).map((_, i) => (
-                    <div
-                      key={`empty-${i}`}
-                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-dashed border-white/20"
-                    >
-                      <div className="text-center text-gray-500 text-sm py-2">Empty seat</div>
+                  ) : (
+                    <div className="text-center text-gray-500 text-sm py-2">
+                      {room.state === 'scheduled' ? 'Starts soon' : 'Empty seat'}
                     </div>
-                  ))}
+                  )}
                 </div>
-                {remainingEmpty > 0 && (
-                  <p className="text-xs text-gray-500 mt-2 text-center">+{remainingEmpty} more {remainingEmpty === 1 ? 'seat' : 'seats'} available</p>
-                )}
-              </>
-            );
-          })()}
+              );
+            })}
+          </div>
 
           {/* Gate error alert */}
           {gateError && (
@@ -904,23 +646,7 @@ function FishbowlRoomPageInner() {
           {room.state === 'active' && (
             <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
               {!user ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  {!audioJoined ? (
-                    <button
-                      onClick={() => {
-                        setJoinedRole('listener');
-                        setAudioJoined(true);
-                        setGuestMode(true);
-                      }}
-                      className="bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors min-h-[44px] text-sm"
-                    >
-                      Listen In
-                    </button>
-                  ) : (
-                    <span className="text-sm text-gray-400">Listening as {guestNameRef.current}</span>
-                  )}
-                  <p className="text-gray-500 text-xs">Sign in to speak or chat</p>
-                </div>
+                <p className="text-gray-400 text-sm">Sign in to join</p>
               ) : isSpeaker ? (
                 <>
                   {!audioJoined && (
@@ -954,7 +680,7 @@ function FishbowlRoomPageInner() {
                   <button
                     onClick={async () => {
                       if (!user) return;
-                      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+                      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'raise_hand', fid: user.fid, username: user.username }),
@@ -1029,13 +755,13 @@ function FishbowlRoomPageInner() {
                       <span className="text-xs font-mono text-[#f5a623] bg-[#f5a623]/10 w-6 h-6 rounded-full flex items-center justify-center">
                         {index + 1}
                       </span>
-                      <span className="text-sm text-white truncate max-w-[120px]">@{r.username}</span>
+                      <span className="text-sm text-white">@{r.username}</span>
                       <span className="text-[10px] text-gray-500">{timeAgo(r.joinedAt)}</span>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={async () => {
-                          const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+                          const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'approve_hand', targetFid: r.fid }),
@@ -1068,7 +794,7 @@ function FishbowlRoomPageInner() {
         </div>
 
         {/* Sidebar — Listeners + Transcript + Chat + Reactions */}
-        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col lg:h-[calc(100vh-57px)] lg:sticky lg:top-[57px]">
+        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col max-h-[50vh] lg:max-h-none">
           {/* Listeners */}
           <div className="p-4 border-b border-white/10">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -1087,63 +813,27 @@ function FishbowlRoomPageInner() {
           </div>
 
           {/* Live Transcript */}
-          <div className="flex-1 flex flex-col overflow-hidden max-h-[40vh] lg:max-h-none">
+          <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {room.state === 'ended' ? '📝 Transcript Archive' : '📝 Live Transcript'}
               </h3>
-              {transcripts.length > 0 && !recap && (
-                <button
-                  onClick={fetchRecap}
-                  disabled={recapLoading}
-                  className="text-xs px-3 py-1.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
-                >
-                  {recapLoading ? 'Generating...' : 'Catch me up'}
-                </button>
-              )}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {recap && (
-                <div className="mb-3 p-3 rounded-lg bg-[#f5a623]/5 border border-[#f5a623]/20">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-[#f5a623]">AI Recap</span>
-                    <button
-                      onClick={() => setRecap(null)}
-                      className="text-xs text-gray-500 hover:text-gray-300"
-                      aria-label="Dismiss recap"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <p className="text-sm text-gray-200 whitespace-pre-line leading-relaxed">{recap}</p>
-                </div>
-              )}
               {transcripts.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-8">
                   {room.state === 'ended' ? 'No transcript was recorded for this fishbowl.' : 'No transcript yet. Start talking!'}
                 </p>
               ) : (
                 <>
-                  {visibleGroups.map((group, i) => (
-                    <div key={i} className="py-2 border-b border-white/5 last:border-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-[#f5a623]">{group.speaker}</span>
-                        <span className="text-xs text-gray-500">[{group.role}]</span>
-                        <span className="text-xs text-gray-600">{timeAgo(group.timestamp)}</span>
-                      </div>
-                      <p className="text-sm text-gray-200 leading-relaxed">
-                        {group.segments.join(' ')}
-                      </p>
+                  {transcripts.map((seg) => (
+                    <div key={seg.id} className="text-sm">
+                      <span className="font-semibold text-[#f5a623]">{seg.speaker_name}</span>
+                      <span className="text-gray-500 text-xs ml-2">[{seg.speaker_role}]</span>
+                      <span className="text-gray-600 text-xs ml-2">{timeAgo(seg.started_at)}</span>
+                      <p className="text-gray-200 mt-1">{seg.text}</p>
                     </div>
                   ))}
-                  {!showAllTranscripts && groupedTranscripts.length > 10 && (
-                    <button
-                      onClick={() => setShowAllTranscripts(true)}
-                      className="w-full py-2 text-xs text-[#f5a623] hover:text-[#d4941f] transition-colors"
-                    >
-                      Show all ({groupedTranscripts.length - 10} more groups)
-                    </button>
-                  )}
                   <div ref={transcriptBottomRef} />
                 </>
               )}
@@ -1151,14 +841,14 @@ function FishbowlRoomPageInner() {
           </div>
 
           {/* Room Chat */}
-          <div className="flex-1 flex flex-col border-t border-white/10 min-h-[150px] max-h-[30vh] lg:max-h-none">
-            <FishbowlChat roomId={room.id} authFetch={authFetch} />
+          <div className="flex-1 flex flex-col border-t border-white/10 min-h-[200px]">
+            <FishbowlChat roomId={room.id} />
           </div>
 
           {/* Reactions */}
           {room.state === 'active' && (
             <div className="p-3 border-t border-white/10">
-              <Reactions roomId={room.id} authFetch={authFetch} />
+              <Reactions roomId={room.id} />
             </div>
           )}
         </div>
@@ -1166,11 +856,11 @@ function FishbowlRoomPageInner() {
 
       {/* Spacer for sticky mobile bottom bar */}
       {audioJoined && room?.state === 'active' && (
-        <div className="lg:hidden h-20" />
+        <div className="lg:hidden h-16" />
       )}
 
       {/* Sticky mobile audio controls */}
-      {audioJoined && (user || guestMode) && room?.state === 'active' && (
+      {audioJoined && user && room?.state === 'active' && (
         <div
           className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0d1b2a] border-t border-white/10 px-4 py-3 flex items-center justify-between"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -1188,10 +878,9 @@ function FishbowlRoomPageInner() {
           <button
             onClick={() => {
               setAudioJoined(false);
-              setGuestMode(false);
               if (user) {
                 const action = isSpeaker ? 'leave_speaker' : 'leave_listener';
-                authFetch(`/api/fishbowlz/rooms/${roomId}`, {
+                fetch(`/api/fishbowlz/rooms/${roomId}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action, fid: user.fid }),
@@ -1216,7 +905,7 @@ function FishbowlRoomPageInner() {
       )}
 
       {showEndedOverlay && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a2a4a] rounded-xl p-6 w-full max-w-sm border border-white/10 text-center">
             <div className="text-4xl mb-3">🐟</div>
             <h2 className="text-lg font-bold mb-1">This fishbowl has ended</h2>

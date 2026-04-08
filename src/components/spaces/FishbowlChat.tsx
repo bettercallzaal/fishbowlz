@@ -13,11 +13,9 @@ interface ChatMessage {
 
 interface FishbowlChatProps {
   roomId: string;
-  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function FishbowlChat({ roomId, authFetch }: FishbowlChatProps) {
-  const apiFetch = authFetch || fetch;
+export function FishbowlChat({ roomId }: FishbowlChatProps) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
@@ -64,7 +62,7 @@ export function FishbowlChat({ roomId, authFetch }: FishbowlChatProps) {
     if (!text.trim() || !user || sending) return;
     setSending(true);
     try {
-      const res = await apiFetch('/api/fishbowlz/chat', {
+      const res = await fetch('/api/fishbowlz/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, text: text.trim() }),
@@ -112,7 +110,7 @@ export function FishbowlChat({ roomId, authFetch }: FishbowlChatProps) {
             placeholder="Message..."
             maxLength={500}
             disabled={sending}
-            className="flex-1 bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] min-h-[36px]"
           />
           <button
             type="submit"
