@@ -69,12 +69,12 @@ BEGIN
   v_listeners := v_room.current_listeners;
   v_speaker_count := jsonb_array_length(v_speakers);
 
-  -- Check if already a speaker
+  -- If already a speaker, just return the current room (idempotent)
   IF EXISTS (
     SELECT 1 FROM jsonb_array_elements(v_speakers) AS s
     WHERE (s->>'fid')::bigint = p_fid
   ) THEN
-    RAISE EXCEPTION 'User % is already a speaker', p_fid;
+    RETURN v_room;
   END IF;
 
   -- Check capacity (hot_seat_count is the max speakers)

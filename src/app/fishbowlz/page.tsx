@@ -31,6 +31,8 @@ interface FishbowlRoom {
   total_sessions: number;
   gating_enabled?: boolean;
   token_gate_address?: string;
+  gate_type?: string;
+  gate_config?: Record<string, unknown>;
   scheduled_at?: string;
   created_at: string;
   last_active_at: string;
@@ -67,12 +69,12 @@ export default function FishbowlzPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [hotSeats, setHotSeats] = useState(5);
+  const [gateType, setGateType] = useState('open');
   const [gatingEnabled, setGatingEnabled] = useState(false);
   const [minQualityScore, setMinQualityScore] = useState(0);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [rotationTimer, setRotationTimer] = useState(0); // 0 = off
-  const [tokenGateEnabled, setTokenGateEnabled] = useState(false);
   const [tokenGateAddress, setTokenGateAddress] = useState('');
   const [tokenGateMinBalance, setTokenGateMinBalance] = useState('1');
 
@@ -111,8 +113,12 @@ export default function FishbowlzPage() {
         hotSeatCount: hotSeats,
         scheduledAt,
         rotationIntervalMs: rotationTimer || undefined,
-        tokenGateAddress: tokenGateEnabled ? tokenGateAddress : undefined,
-        tokenGateMinBalance: tokenGateEnabled ? tokenGateMinBalance : undefined,
+        gate_type: gateType,
+        gate_config: gateType === 'token'
+          ? { address: tokenGateAddress, minBalance: tokenGateMinBalance }
+          : {},
+        tokenGateAddress: gateType === 'token' ? tokenGateAddress : undefined,
+        tokenGateMinBalance: gateType === 'token' ? tokenGateMinBalance : undefined,
       }),
     });
 
@@ -259,36 +265,54 @@ export default function FishbowlzPage() {
                 </div>
               )}
             </div>
+            {/* Room Access */}
             <div className="mb-4">
-              <label className="flex items-center gap-2 text-sm text-gray-400 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={tokenGateEnabled}
-                  onChange={(e) => setTokenGateEnabled(e.target.checked)}
-                  className="accent-[#f5a623]"
-                />
-                🔒 Token gate this room
-              </label>
-              {tokenGateEnabled && (
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    placeholder="Token contract address (0x...)"
-                    value={tokenGateAddress}
-                    onChange={(e) => setTokenGateAddress(e.target.value)}
-                    className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Minimum balance (e.g. 100)"
-                    value={tokenGateMinBalance}
-                    onChange={(e) => setTokenGateMinBalance(e.target.value)}
-                    className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623]"
-                  />
-                  <p className="text-[10px] text-gray-500">Users must hold this token on Base to join</p>
-                </div>
-              )}
+              <label className="block text-sm font-medium text-gray-300 mb-2">Who can join?</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'open', label: 'Open', desc: 'Anyone' },
+                  { value: 'farcaster', label: 'Farcaster', desc: 'FC account required' },
+                  { value: 'invite', label: 'Invite Only', desc: 'Share invite links' },
+                  { value: 'token', label: 'Token Gate', desc: 'Hold specific token' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setGateType(opt.value)}
+                    className={`p-3 rounded-lg border text-left transition-colors ${
+                      gateType === opt.value
+                        ? 'border-[#f5a623] bg-[#f5a623]/10 text-white'
+                        : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Token gate address - only show when token gate selected */}
+            {gateType === 'token' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-1">Token contract address</label>
+                <input
+                  type="text"
+                  value={tokenGateAddress}
+                  onChange={e => setTokenGateAddress(e.target.value)}
+                  placeholder="0x..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:border-[#f5a623] focus:outline-none"
+                />
+                <input
+                  type="text"
+                  placeholder="Minimum balance (e.g. 100)"
+                  value={tokenGateMinBalance}
+                  onChange={(e) => setTokenGateMinBalance(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 mt-2 text-white placeholder-gray-500 focus:border-[#f5a623] focus:outline-none"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Users must hold this token on Base to join</p>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={handleCreate}
@@ -344,14 +368,22 @@ export default function FishbowlzPage() {
                   {room.description && (
                     <p className="text-gray-400 text-sm mb-3 line-clamp-2">{room.description}</p>
                   )}
-                  {room.gating_enabled && (
-                    <span className="inline-flex items-center gap-1 text-xs bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full mb-2">
-                      🔐 FC-gated
+                  {room.gate_type && room.gate_type !== 'open' && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-white/10 text-gray-400 px-2 py-0.5 rounded-full mb-2">
+                      {room.gate_type === 'farcaster' ? 'FC Only' :
+                       room.gate_type === 'invite' ? 'Invite Only' :
+                       room.gate_type === 'token' ? 'Token Gated' : ''}
                     </span>
                   )}
-                  {room.token_gate_address && (
+                  {/* Legacy badges for rooms created before gate_type */}
+                  {!room.gate_type && room.gating_enabled && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full mb-2">
+                      FC-gated
+                    </span>
+                  )}
+                  {!room.gate_type && room.token_gate_address && (
                     <span className="inline-flex items-center gap-1 text-xs bg-amber-600/20 text-amber-400 px-2 py-0.5 rounded-full mb-2">
-                      🔒 Token-gated
+                      Token-gated
                     </span>
                   )}
                   {room.state === 'ended' ? (

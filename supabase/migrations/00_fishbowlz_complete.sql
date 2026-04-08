@@ -414,7 +414,7 @@ BEGIN
     SELECT 1 FROM jsonb_array_elements(v_speakers) AS s
     WHERE (s->>'fid')::bigint = p_fid
   ) THEN
-    RAISE EXCEPTION 'User % is already a speaker', p_fid;
+    RETURN v_room;
   END IF;
 
   -- Check capacity (hot_seat_count is the max speakers)

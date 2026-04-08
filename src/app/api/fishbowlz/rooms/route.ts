@@ -21,6 +21,8 @@ const CreateRoomSchema = z.object({
   scheduledAt: z.string().datetime().optional(),
   tokenGateAddress: z.string().startsWith('0x').optional(),
   tokenGateMinBalance: z.string().optional(),
+  gate_type: z.enum(['open', 'farcaster', 'invite', 'token', 'allowlist']).default('open'),
+  gate_config: z.record(z.string(), z.unknown()).default({}),
 });
 
 export async function POST(req: NextRequest) {
@@ -70,6 +72,8 @@ export async function POST(req: NextRequest) {
         token_gate_min_balance: data.tokenGateMinBalance || '0',
         token_gate_chain_id: 8453,
         token_gate_type: data.tokenGateAddress ? 'erc20' : null,
+        gate_type: data.gate_type,
+        gate_config: data.gate_config,
       })
       .select()
       .single();

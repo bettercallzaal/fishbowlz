@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { TranscriptInput } from '@/components/spaces/TranscriptInput';
 import { FishbowlChat } from '@/components/spaces/FishbowlChat';
@@ -102,6 +102,8 @@ interface FishbowlRoom {
   hand_raises?: Array<{ fid: number; username: string; joinedAt: string }>;
   audio_source_type: string | null;
   audio_source_url: string | null;
+  gate_type?: string;
+  gate_config?: Record<string, unknown>;
   created_at: string;
   scheduled_at?: string | null;
   ai_summary?: string | null;
@@ -120,7 +122,9 @@ interface TranscriptSegment {
 function FishbowlRoomPageInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const roomId = params.id as string;
+  const inviteParam = searchParams.get('invite');
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -141,6 +145,8 @@ function FishbowlRoomPageInner() {
   const [showAllTranscripts, setShowAllTranscripts] = useState(false);
   const [recap, setRecap] = useState<string | null>(null);
   const [recapLoading, setRecapLoading] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   // Group consecutive transcript entries from the same speaker
   const groupedTranscripts = useMemo(() => {
@@ -468,7 +474,7 @@ function FishbowlRoomPageInner() {
       const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join_speaker', fid: user.fid, username: user.username }),
+        body: JSON.stringify({ action: 'join_speaker', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -497,7 +503,7 @@ function FishbowlRoomPageInner() {
       const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join_listener', fid: user.fid, username: user.username }),
+        body: JSON.stringify({ action: 'join_listener', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -542,6 +548,28 @@ function FishbowlRoomPageInner() {
     setAudioJoined(false);
   };
 
+  const generateInvite = async () => {
+    if (!room || inviteLoading) return;
+    setInviteLoading(true);
+    try {
+      const res = await fetch('/api/fishbowlz/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: room.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInviteCode(data.code);
+      } else {
+        toast('Failed to generate invite', 'error');
+      }
+    } catch {
+      toast('Failed to generate invite', 'error');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[#0a1628] text-white flex items-center justify-center">
@@ -570,7 +598,16 @@ function FishbowlRoomPageInner() {
             ←
           </button>
           <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold truncate" title={room.title}>{room.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold truncate" title={room.title}>{room.title}</h1>
+              {room.gate_type && room.gate_type !== 'open' && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400 shrink-0">
+                  {room.gate_type === 'farcaster' ? 'FC Only' :
+                   room.gate_type === 'invite' ? 'Invite Only' :
+                   room.gate_type === 'token' ? 'Token Gated' : ''}
+                </span>
+              )}
+            </div>
             <p className="text-xs sm:text-sm text-gray-400">by @{room.host_username}</p>
           </div>
         </div>
@@ -580,8 +617,17 @@ function FishbowlRoomPageInner() {
             className="text-xs px-2 py-1 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors"
             title="Share room"
           >
-            🔗 Share
+            Share
           </button>
+          {isHost && room.gate_type === 'invite' && (
+            <button
+              onClick={generateInvite}
+              disabled={inviteLoading}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
+            >
+              {inviteLoading ? '...' : 'Invite'}
+            </button>
+          )}
           {room.state === 'ended' && (
             <a
               href={`/api/fishbowlz/export?roomId=${room.id}`}
@@ -610,6 +656,31 @@ function FishbowlRoomPageInner() {
           )}
         </div>
       </div>
+
+      {inviteCode && (
+        <div className="px-4 sm:px-6 py-2 border-b border-white/10 bg-white/[0.02]">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+            <span className="text-xs text-gray-400 truncate flex-1">
+              fishbowlz.com/fishbowlz/{room.slug}?invite={inviteCode}
+            </span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`https://fishbowlz.com/fishbowlz/${room.slug}?invite=${inviteCode}`);
+                toast('Invite link copied!', 'success');
+              }}
+              className="text-xs text-[#f5a623] hover:text-[#d4941f] shrink-0"
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => setInviteCode(null)}
+              className="text-xs text-gray-500 hover:text-gray-300 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {showGuidance && (
         <div className="bg-[#f5a623]/10 border-b border-[#f5a623]/20 px-4 py-2 flex items-center justify-between gap-2">
