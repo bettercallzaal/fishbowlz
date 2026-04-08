@@ -500,48 +500,8 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
 
       {/* Screen Share */}
       {screenSharingPeerId && (
-        <div className="p-4 pb-0">
-          <ScreenShareView peerId={screenSharingPeerId} peerName={screenSharingPeerName || 'Someone'} />
-        </div>
-      )}
-
-      {/* Speakers */}
-      {speakers.length > 0 && (
         <div className="p-4">
-          <h4 className="text-gray-500 text-xs uppercase tracking-wider mb-3">
-            🔥 Hot Seat ({speakers.length})
-          </h4>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-            {speakers.map((peer) => (
-              <PeerTile
-                key={peer.id}
-                peerId={peer.id}
-                peerName={peer.name || '?'}
-                isLocal={peer.isLocal}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Listeners */}
-      {listeners.length > 0 && (
-        <div className="px-4 pb-4">
-          <h4 className="text-gray-500 text-xs uppercase tracking-wider mb-3">
-            👥 Listening ({listeners.length})
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {listeners.map((peer) => (
-              <div key={peer.id} className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full">
-                <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 text-[10px]">
-                  {(peer.name || '?')[0]}
-                </div>
-                <span className="text-gray-400 text-xs">
-                  {peer.name} {peer.isLocal && '(You)'}
-                </span>
-              </div>
-            ))}
-          </div>
+          <ScreenShareView peerId={screenSharingPeerId} peerName={screenSharingPeerName || 'Someone'} />
         </div>
       )}
     </div>
