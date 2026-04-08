@@ -148,6 +148,9 @@ function FishbowlRoomPageInner() {
   const [recapLoading, setRecapLoading] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [guestMode, setGuestMode] = useState(false);
+  // Stable guest username so it doesn't change on re-render
+  const guestNameRef = useRef(`Guest-${Math.floor(1000 + Math.random() * 9000)}`);
 
   // Group consecutive transcript entries from the same speaker
   const groupedTranscripts = useMemo(() => {
@@ -753,19 +756,23 @@ function FishbowlRoomPageInner() {
 
           {room.state === 'active' && (
             <>
-              {/* HMS Audio */}
-              {audioJoined && user && (
+              {/* HMS Audio — supports both authenticated users and anonymous guest listeners */}
+              {audioJoined && (user || guestMode) && (
                 <div className="mb-6 rounded-xl overflow-hidden border border-white/10">
                   <HMSFishbowlRoom
                     fishbowlRoomId={room.id}
                     fishbowlSlug={room.slug}
-                    userFid={user.fid}
-                    userName={user.displayName || user.username || 'Anonymous'}
+                    userFid={user?.fid || 0}
+                    userName={user?.displayName || user?.username || guestNameRef.current}
                     role={joinedRole}
                     isHost={isHost}
-                    onLeave={() => setAudioJoined(false)}
-                    authFetch={authFetch}
+                    onLeave={() => {
+                      setAudioJoined(false);
+                      setGuestMode(false);
+                    }}
+                    authFetch={guestMode ? undefined : authFetch}
                     participantCount={(room.current_speakers?.length || 0) + (room.current_listeners?.length || 0)}
+                    guestMode={guestMode}
                   />
                 </div>
               )}
@@ -897,7 +904,23 @@ function FishbowlRoomPageInner() {
           {room.state === 'active' && (
             <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
               {!user ? (
-                <p className="text-gray-400 text-sm">Sign in to join</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  {!audioJoined ? (
+                    <button
+                      onClick={() => {
+                        setJoinedRole('listener');
+                        setAudioJoined(true);
+                        setGuestMode(true);
+                      }}
+                      className="bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors min-h-[44px] text-sm"
+                    >
+                      Listen In
+                    </button>
+                  ) : (
+                    <span className="text-sm text-gray-400">Listening as {guestNameRef.current}</span>
+                  )}
+                  <p className="text-gray-500 text-xs">Sign in to speak or chat</p>
+                </div>
               ) : isSpeaker ? (
                 <>
                   {!audioJoined && (

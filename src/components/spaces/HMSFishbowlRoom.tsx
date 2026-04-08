@@ -8,6 +8,8 @@ import {
   useVideo,
   useScreenShare,
   selectIsConnectedToRoom,
+  selectRoomState,
+  HMSRoomState,
   selectPeers,
   selectIsPeerAudioEnabled,
   selectIsLocalAudioEnabled,
@@ -26,6 +28,7 @@ interface HMSFishbowlRoomProps {
   onLeave: () => void;
   authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
   participantCount?: number;
+  guestMode?: boolean;
 }
 
 /** Renders a video element for a given track ID using the 100ms useVideo hook */
@@ -119,13 +122,14 @@ function ScreenShareView({ peerId, peerName }: { peerId: string; peerName: strin
   );
 }
 
-function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch, participantCount }: HMSFishbowlRoomProps) {
+function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch, participantCount, guestMode }: HMSFishbowlRoomProps) {
   const hmsActions = useHMSActions();
   // Stable reference to avoid re-triggering effects when authFetch changes identity
   const apiFetchRef = useRef(authFetch || fetch);
   apiFetchRef.current = authFetch || fetch;
-  const apiFetch = useCallback((...args: Parameters<typeof fetch>) => apiFetchRef.current(...args), []);
+  const apiFetch = useCallback((url: string, options?: RequestInit) => apiFetchRef.current(url, options), []);
   const isConnected = useHMSStore(selectIsConnectedToRoom);
+  const roomState = useHMSStore(selectRoomState);
   const peers = useHMSStore(selectPeers);
   const isLocalAudioEnabled = useHMSStore(selectIsLocalAudioEnabled);
   const isLocalVideoEnabled = useHMSStore(selectIsLocalVideoEnabled);
@@ -137,6 +141,9 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
   } = useScreenShare();
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const reconnectAttempts = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 3;
   const [transcribing, setTranscribing] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
@@ -215,25 +222,76 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
 
   // Capture initial values in refs so the join effect only runs ONCE per mount.
   // Re-renders from Realtime room updates must NOT cause leave/rejoin.
-  const joinParamsRef = useRef({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost });
+  const joinParamsRef = useRef({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, guestMode });
   // Only update ref on first mount — ignore subsequent prop changes
 
+  // Auto-reconnect when HMS connection drops
   useEffect(() => {
-    const { fishbowlRoomId: roomId, fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host } = joinParamsRef.current;
+    if (roomState === HMSRoomState.Reconnecting) {
+      setReconnecting(true);
+      reconnectAttempts.current += 1;
+    } else if (roomState === HMSRoomState.Connected) {
+      if (reconnecting) {
+        setReconnecting(false);
+        reconnectAttempts.current = 0;
+      }
+    } else if (
+      (roomState === HMSRoomState.Disconnected || roomState === HMSRoomState.Failed) &&
+      reconnectAttempts.current > 0
+    ) {
+      // HMS auto-reconnect failed - try manual reconnect
+      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        const rejoin = async () => {
+          try {
+            const { fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host } = joinParamsRef.current;
+            const hmsRole = host ? 'moderator' : r;
+            const roomName = slug ? `fishbowl-${slug}` : undefined;
+            const res = await apiFetch('/api/100ms/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: String(fid), role: hmsRole, roomName }),
+            });
+            if (res.ok) {
+              const { token } = await res.json();
+              await hmsActions.join({ userName: name, authToken: token });
+            }
+          } catch {
+            // Will retry on next disconnect cycle
+          }
+        };
+        setTimeout(rejoin, 2000 * reconnectAttempts.current);
+      } else {
+        setError('Connection lost. Please rejoin the room.');
+        setReconnecting(false);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- roomState drives this effect
+  }, [roomState]);
 
-    if (!roomId || !fid) return;
+  useEffect(() => {
+    const { fishbowlRoomId: roomId, fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host, guestMode: guest } = joinParamsRef.current;
+
+    // For guest mode, fid may be 0 - that's OK
+    if (!roomId || (!fid && !guest)) return;
 
     let cancelled = false;
     const joinRoom = async () => {
       setJoining(true);
       setError(null);
       try {
-        const hmsRole = host ? 'moderator' : r;
+        // In guest mode, always request listener role and use plain fetch (no auth)
+        const hmsRole = guest ? 'listener' : (host ? 'moderator' : r);
         const roomName = slug ? `fishbowl-${slug}` : undefined;
-        const res = await apiFetch('/api/100ms/token', {
+        const fetchFn = guest ? fetch : apiFetch;
+        const res = await fetchFn('/api/100ms/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: String(fid), role: hmsRole, roomName }),
+          body: JSON.stringify({
+            userId: guest ? `guest-${Math.random().toString(36).slice(2, 8)}` : String(fid),
+            role: hmsRole,
+            roomName,
+            ...(guest ? { anonymous: true } : {}),
+          }),
         });
         if (cancelled) return;
         if (!res.ok) {
@@ -269,13 +327,18 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
   const retryJoin = () => {
     setError(null);
     setJoining(true);
-    // Re-trigger by toggling state — the useEffect will re-run
-    const hmsRole = isHost ? 'moderator' : role;
+    const hmsRole = guestMode ? 'listener' : (isHost ? 'moderator' : role);
     const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
-    apiFetch('/api/100ms/token', {
+    const fetchFn = guestMode ? fetch : apiFetch;
+    fetchFn('/api/100ms/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),
+      body: JSON.stringify({
+        userId: guestMode ? `guest-${Math.random().toString(36).slice(2, 8)}` : String(userFid),
+        role: hmsRole,
+        roomName,
+        ...(guestMode ? { anonymous: true } : {}),
+      }),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -305,7 +368,10 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           Check that your browser has microphone permission enabled. If the problem persists, try refreshing the page.
         </p>
         <button
-          onClick={retryJoin}
+          onClick={() => {
+            reconnectAttempts.current = 0;
+            retryJoin();
+          }}
           className="px-4 py-1.5 bg-[#f5a623] text-[#0a1628] rounded-lg text-xs font-medium hover:bg-[#d4941f] transition-colors"
         >
           Retry Connection
@@ -346,7 +412,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           <span className="text-gray-500 text-xs">{participantCount ?? peers.length} in room</span>
         </div>
         <div className="flex gap-2">
-          {(isHost || role === 'speaker') && (
+          {!guestMode && (isHost || role === 'speaker') && (
             <button
               onClick={toggleTranscription}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -359,51 +425,55 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
               {transcribing ? '⏹ Live' : '🎤 Transcribe'}
             </button>
           )}
-          <button
-            onClick={toggleMute}
-            className={`p-2 rounded-full transition-colors ${
-              isLocalAudioEnabled
-                ? 'bg-[#f5a623]/20 text-[#f5a623]'
-                : 'bg-red-500/20 text-red-400'
-            }`}
-            aria-label={isLocalAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            title={isLocalAudioEnabled ? 'Mute' : 'Unmute'}
-          >
-            {isLocalAudioEnabled ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5.29"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-            )}
-          </button>
-          <button
-            onClick={toggleVideo}
-            className={`p-2 rounded-full transition-colors ${
-              isLocalVideoEnabled
-                ? 'bg-[#f5a623]/20 text-[#f5a623]'
-                : 'bg-red-500/20 text-red-400'
-            }`}
-            aria-label={isLocalVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-            title={isLocalVideoEnabled ? 'Camera off' : 'Camera on'}
-          >
-            {isLocalVideoEnabled ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.66 6H14a2 2 0 0 1 2 2v2.34l1 1L22 8v8"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-            )}
-          </button>
-          {toggleScreenShare && (
-            <button
-              onClick={() => toggleScreenShare()}
-              className={`p-2 rounded-full transition-colors ${
-                amIScreenSharing
-                  ? 'bg-[#f5a623] text-[#0a1628]'
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-              aria-label={amIScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-              title={amIScreenSharing ? 'Stop sharing' : 'Share screen'}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-            </button>
+          {!guestMode && (
+            <>
+              <button
+                onClick={toggleMute}
+                className={`p-2 rounded-full transition-colors ${
+                  isLocalAudioEnabled
+                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
+                    : 'bg-red-500/20 text-red-400'
+                }`}
+                aria-label={isLocalAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                title={isLocalAudioEnabled ? 'Mute' : 'Unmute'}
+              >
+                {isLocalAudioEnabled ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5.29"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                )}
+              </button>
+              <button
+                onClick={toggleVideo}
+                className={`p-2 rounded-full transition-colors ${
+                  isLocalVideoEnabled
+                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
+                    : 'bg-red-500/20 text-red-400'
+                }`}
+                aria-label={isLocalVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+                title={isLocalVideoEnabled ? 'Camera off' : 'Camera on'}
+              >
+                {isLocalVideoEnabled ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.66 6H14a2 2 0 0 1 2 2v2.34l1 1L22 8v8"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                )}
+              </button>
+              {toggleScreenShare && (
+                <button
+                  onClick={() => toggleScreenShare()}
+                  className={`p-2 rounded-full transition-colors ${
+                    amIScreenSharing
+                      ? 'bg-[#f5a623] text-[#0a1628]'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  aria-label={amIScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+                  title={amIScreenSharing ? 'Stop sharing' : 'Share screen'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={leaveRoom}
@@ -413,6 +483,14 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           </button>
         </div>
       </div>
+
+      {/* Reconnecting banner */}
+      {reconnecting && (
+        <div className="px-4 py-2 bg-[#f5a623]/10 border-b border-[#f5a623]/20 flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-[#f5a623] animate-pulse" />
+          <span className="text-xs text-[#f5a623]">Reconnecting to audio...</span>
+        </div>
+      )}
 
       {/* Screen Share */}
       {screenSharingPeerId && (

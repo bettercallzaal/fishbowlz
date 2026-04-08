@@ -10,17 +10,11 @@ const TokenSchema = z.object({
   role: z.string().min(1),
   roomId: z.string().optional(),
   roomName: z.string().max(100).optional(),
+  anonymous: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth guard — prevent unauthenticated token minting
-    const { getSessionData } = await import('@/lib/auth/session');
-    const session = await getSessionData();
-    if (!session?.fid) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const accessKey = process.env.NEXT_PUBLIC_100MS_ACCESS_KEY;
     const appSecret = process.env.HMS_APP_SECRET;
     const templateId = process.env.NEXT_PUBLIC_100MS_TEMPLATE_ID || '';
@@ -36,7 +30,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { userId, role, roomId, roomName } = parsed.data;
+    const { userId, role, roomId, roomName, anonymous } = parsed.data;
+
+    // Allow anonymous listeners - no auth required for listen-only mode
+    if (role === 'listener' && anonymous) {
+      // Generate management token to find/create room
+      const mgmtToken = jwt.sign(
+        {
+          access_key: accessKey,
+          type: 'management',
+          version: 2,
+          iat: Math.floor(Date.now() / 1000),
+          nbf: Math.floor(Date.now() / 1000),
+        },
+        appSecret,
+        { algorithm: 'HS256', expiresIn: '4h', jwtid: crypto.randomUUID() }
+      );
+
+      let hmsRoomId = roomId;
+      const targetRoomName = roomName || 'zao-live-room';
+
+      if (!hmsRoomId) {
+        const listRes = await fetch('https://api.100ms.live/v2/rooms', {
+          headers: { Authorization: `Bearer ${mgmtToken}` },
+        });
+        const rooms = await listRes.json();
+        const existing = rooms?.data?.find((r: { name: string }) => r.name === targetRoomName);
+        if (existing) {
+          hmsRoomId = existing.id;
+        } else {
+          // Anonymous listeners cannot create rooms - room must already exist
+          return NextResponse.json({ error: 'Room not found' }, { status: 404 });
+        }
+      }
+
+      // Generate listener-only app token with shorter expiry (4 hours)
+      const anonToken = jwt.sign(
+        {
+          access_key: accessKey,
+          room_id: hmsRoomId,
+          user_id: userId,
+          role: 'listener', // Always listener - never allow escalation
+          type: 'app',
+          version: 2,
+          iat: Math.floor(Date.now() / 1000),
+          nbf: Math.floor(Date.now() / 1000),
+        },
+        appSecret,
+        { algorithm: 'HS256', expiresIn: '4h', jwtid: crypto.randomUUID() }
+      );
+
+      // Audit log anonymous token (no fid available)
+      logAuditEvent({
+        actorFid: 0,
+        action: '100ms.token.generate.anonymous',
+        targetType: 'user',
+        targetId: userId,
+        details: { userId, role: 'listener', roomId: hmsRoomId, anonymous: true },
+        ipAddress: getClientIp(req),
+      });
+
+      return NextResponse.json({ token: anonToken, roomId: hmsRoomId });
+    }
+
+    // Auth guard — prevent unauthenticated token minting for non-anonymous requests
+    const { getSessionData } = await import('@/lib/auth/session');
+    const session = await getSessionData();
+    if (!session?.fid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Verify requested userId matches session user's FID
     if (userId !== String(session.fid)) {

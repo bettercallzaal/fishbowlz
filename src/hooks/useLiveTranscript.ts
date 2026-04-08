@@ -11,8 +11,7 @@ import { useEffect, useRef, useCallback } from 'react';
  * Requires: browser with Web Speech API support (Chrome, Edge — not Safari/Firefox).
  * Falls back gracefully if unavailable.
  */
-export function useLiveTranscript(roomId: string, enabled: boolean, authFetch?: (url: string, options?: RequestInit) => Promise<Response>) {
-  const apiFetch = authFetch || fetch;
+export function useLiveTranscript(roomId: string, enabled: boolean) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const lastTranscriptRef = useRef<string>('');
@@ -25,7 +24,7 @@ export function useLiveTranscript(roomId: string, enabled: boolean, authFetch?: 
       if (!text.trim()) return;
 
       try {
-        await apiFetch('/api/fishbowlz/transcribe', {
+        await fetch('/api/fishbowlz/transcribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -63,7 +62,6 @@ export function useLiveTranscript(roomId: string, enabled: boolean, authFetch?: 
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = async (event: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const results = Array.from(event.results) as any[];
 
       for (const result of results) {

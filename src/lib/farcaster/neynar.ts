@@ -339,3 +339,176 @@ export async function registerUser(
   if (!res.ok) throw new Error(`Neynar register error: ${res.status}`);
   return res.json();
 }
+
+export async function getNotifications(fid: number, cursor?: string, limit = 25) {
+  const params = new URLSearchParams({
+    fid: String(fid),
+    limit: String(limit),
+  });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetchWithFailover(`/notifications?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Neynar notifications error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function markNotificationsSeen(signerUuid: string) {
+  const res = await fetch(`${NEYNAR_BASE}/notifications/seen`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar mark notifications seen error: ${res.status}`);
+  return res.json();
+}
+
+export async function muteUser(signerUuid: string, targetFid: number) {
+  const res = await fetch(`${NEYNAR_BASE}/mute`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid, target_fid: targetFid }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar mute error: ${res.status}`);
+  return res.json();
+}
+
+export async function unmuteUser(signerUuid: string, targetFid: number) {
+  const res = await fetch(`${NEYNAR_BASE}/mute`, {
+    method: 'DELETE',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid, target_fid: targetFid }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar unmute error: ${res.status}`);
+  return res.json();
+}
+
+export async function blockUser(signerUuid: string, targetFid: number) {
+  const res = await fetch(`${NEYNAR_BASE}/block`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid, target_fid: targetFid }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar block error: ${res.status}`);
+  return res.json();
+}
+
+export async function unblockUser(signerUuid: string, targetFid: number) {
+  const res = await fetch(`${NEYNAR_BASE}/block`, {
+    method: 'DELETE',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid, target_fid: targetFid }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar unblock error: ${res.status}`);
+  return res.json();
+}
+
+export async function getMuteList(fid: number, limit = 100, cursor?: string) {
+  const params = new URLSearchParams({
+    fid: String(fid),
+    limit: String(limit),
+  });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`${NEYNAR_BASE}/mute/list?${params}`, {
+    headers: headers(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Neynar mute list error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function getStorageUsage(fid: number) {
+  const params = new URLSearchParams({ fid: String(fid) });
+  const res = await fetchWithFailover(`/storage/usage?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Neynar storage usage error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function deleteCast(signerUuid: string, castHash: string) {
+  const res = await fetch(`${NEYNAR_BASE}/cast`, {
+    method: 'DELETE',
+    headers: headers(),
+    body: JSON.stringify({ signer_uuid: signerUuid, target_hash: castHash }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar delete cast error: ${res.status}`);
+  return res.json();
+}
+
+export async function getCastConversationSummary(castHash: string) {
+  const params = new URLSearchParams({ identifier: castHash, type: 'hash' });
+  const res = await fetchWithFailover(`/cast/conversation/summary?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Neynar cast conversation summary error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function getPopularCasts(fid: number) {
+  const res = await fetchWithFailover(`/feed/user/popular?fid=${fid}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar popular casts error: ${res.status}`);
+  return res.json();
+}
+
+export async function getBestFriends(fid: number, limit = 10) {
+  const params = new URLSearchParams({ fid: String(fid), limit: String(limit) });
+  const res = await fetchWithFailover(`/user/best-friends?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar best friends error: ${res.status}`);
+  return res.json();
+}
+
+export async function getTrendingTopics(limit = 10) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const res = await fetchWithFailover(`/trending/topics?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar trending topics error: ${res.status}`);
+  return res.json();
+}
+
+export async function getAccountVerifications(fid: number) {
+  const res = await fetch(`https://api.farcaster.xyz/fc/account-verifications?fid=${fid}`, {
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Farcaster verifications error: ${res.status}`);
+  return res.json();
+}
+
+export async function getFollowSuggestions(fid: number, limit = 20) {
+  const params = new URLSearchParams({ fid: String(fid), limit: String(limit) });
+  const res = await fetchWithFailover(`/user/suggestions?${params}`, {
+    headers: readHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Neynar follow suggestions error: ${res.status}`);
+  return res.json();
+}
