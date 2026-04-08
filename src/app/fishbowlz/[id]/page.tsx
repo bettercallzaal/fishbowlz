@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { TranscriptInput } from '@/components/spaces/TranscriptInput';
@@ -138,6 +138,29 @@ function FishbowlRoomPageInner() {
   const endedRoomRef = useRef<FishbowlRoom | null>(null);
   const [guidanceDismissed, setGuidanceDismissed] = useState(false);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
+  const [showAllTranscripts, setShowAllTranscripts] = useState(false);
+
+  // Group consecutive transcript entries from the same speaker
+  const groupedTranscripts = useMemo(() => {
+    if (!transcripts.length) return [];
+    const groups: { speaker: string; role: string; timestamp: string; segments: string[] }[] = [];
+    for (const t of transcripts) {
+      const last = groups[groups.length - 1];
+      if (last && last.speaker === (t.speaker_name || 'Unknown')) {
+        last.segments.push(t.text);
+      } else {
+        groups.push({
+          speaker: t.speaker_name || 'Unknown',
+          role: t.speaker_role || 'speaker',
+          timestamp: t.started_at,
+          segments: [t.text],
+        });
+      }
+    }
+    return groups;
+  }, [transcripts]);
+
+  const visibleGroups = showAllTranscripts ? groupedTranscripts : groupedTranscripts.slice(0, 10);
 
   const isHost = user?.fid === room?.host_fid;
   const isSpeaker = room?.current_speakers?.some((s) => s.fid === user?.fid);
@@ -666,67 +689,91 @@ function FishbowlRoomPageInner() {
           )}
 
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">🔥 Hot Seat</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {Array.from({ length: room.hot_seat_count }).map((_, i) => {
-              const speaker = room.current_speakers?.[i];
+          {(() => {
+            const occupiedSeats = room.current_speakers || [];
+            const emptyCount = room.hot_seat_count - occupiedSeats.length;
+            const maxEmptyShown = occupiedSeats.length > 0 ? 2 : 0;
+            const emptyToShow = Math.min(emptyCount, maxEmptyShown);
+            const remainingEmpty = emptyCount - emptyToShow;
+
+            // No speakers at all - show compact placeholder
+            if (occupiedSeats.length === 0) {
               return (
-                <div
-                  key={i}
-                  className={`rounded-xl p-4 border-2 transition-colors ${
-                    speaker
-                      ? 'bg-[#1a2a4a] border-[#f5a623]'
-                      : 'bg-[#1a2a4a] border-dashed border-white/20'
-                  }`}
-                >
-                  {speaker ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 flex items-center justify-center text-[#f5a623] font-bold text-sm">
-                        {speaker.username[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-sm">{speaker.username}</p>
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs text-gray-400">🔥 Hot seat</p>
-                          <SpeakerTime joinedAt={speaker.joinedAt} />
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {isHost && speaker.fid !== user?.fid && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
-                                });
-                                if (res.ok) {
-                                  toast(`Moved @${speaker.username} to listeners`, 'info');
-                                  await fetchRoom();
-                                }
-                              }}
-                              className="text-[10px] text-red-400 hover:text-red-300"
-                              title="Move to listeners"
-                            >
-                              kick
-                            </button>
-                          )}
-                          <TipButton
-                            speakerFid={speaker.fid}
-                            speakerUsername={speaker.username}
-                            roomId={room.id}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center text-gray-500 text-sm py-2">
-                      {room.state === 'scheduled' ? 'Starts soon' : 'Empty seat'}
-                    </div>
-                  )}
+                <div className="text-center py-6 text-gray-400 bg-[#1a2a4a] rounded-xl border border-dashed border-white/20">
+                  <p className="text-2xl mb-2">{'\u{1FA91}'}</p>
+                  <p className="text-sm">{room.hot_seat_count} seats available</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {room.state === 'scheduled' ? 'Starts soon' : 'Sign in to take a seat'}
+                  </p>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            // Has speakers - show occupied + up to 2 empty placeholders
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {occupiedSeats.map((speaker, i) => (
+                    <div
+                      key={`speaker-${speaker.fid}`}
+                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-[#f5a623]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 flex items-center justify-center text-[#f5a623] font-bold text-sm">
+                          {speaker.username[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">{speaker.username}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs text-gray-400">🔥 Hot seat</p>
+                            <SpeakerTime joinedAt={speaker.joinedAt} />
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {isHost && speaker.fid !== user?.fid && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
+                                  });
+                                  if (res.ok) {
+                                    toast(`Moved @${speaker.username} to listeners`, 'info');
+                                    await fetchRoom();
+                                  }
+                                }}
+                                className="text-[10px] text-red-400 hover:text-red-300"
+                                title="Move to listeners"
+                              >
+                                kick
+                              </button>
+                            )}
+                            <TipButton
+                              speakerFid={speaker.fid}
+                              speakerUsername={speaker.username}
+                              roomId={room.id}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {Array.from({ length: emptyToShow }).map((_, i) => (
+                    <div
+                      key={`empty-${i}`}
+                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-dashed border-white/20"
+                    >
+                      <div className="text-center text-gray-500 text-sm py-2">Empty seat</div>
+                    </div>
+                  ))}
+                </div>
+                {remainingEmpty > 0 && (
+                  <p className="text-xs text-gray-500 mt-2 text-center">+{remainingEmpty} more {remainingEmpty === 1 ? 'seat' : 'seats'} available</p>
+                )}
+              </>
+            );
+          })()}
 
           {/* Gate error alert */}
           {gateError && (
@@ -932,14 +979,26 @@ function FishbowlRoomPageInner() {
                 </p>
               ) : (
                 <>
-                  {transcripts.map((seg) => (
-                    <div key={seg.id} className="text-sm">
-                      <span className="font-semibold text-[#f5a623]">{seg.speaker_name}</span>
-                      <span className="text-gray-500 text-xs ml-2">[{seg.speaker_role}]</span>
-                      <span className="text-gray-600 text-xs ml-2">{timeAgo(seg.started_at)}</span>
-                      <p className="text-gray-200 mt-1">{seg.text}</p>
+                  {visibleGroups.map((group, i) => (
+                    <div key={i} className="py-2 border-b border-white/5 last:border-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium text-[#f5a623]">{group.speaker}</span>
+                        <span className="text-xs text-gray-500">[{group.role}]</span>
+                        <span className="text-xs text-gray-600">{timeAgo(group.timestamp)}</span>
+                      </div>
+                      <p className="text-sm text-gray-200 leading-relaxed">
+                        {group.segments.join(' ')}
+                      </p>
                     </div>
                   ))}
+                  {!showAllTranscripts && groupedTranscripts.length > 10 && (
+                    <button
+                      onClick={() => setShowAllTranscripts(true)}
+                      className="w-full py-2 text-xs text-[#f5a623] hover:text-[#d4941f] transition-colors"
+                    >
+                      Show all ({groupedTranscripts.length - 10} more groups)
+                    </button>
+                  )}
                   <div ref={transcriptBottomRef} />
                 </>
               )}
