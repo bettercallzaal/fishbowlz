@@ -134,6 +134,7 @@ function FishbowlRoomPageInner() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioJoined, setAudioJoined] = useState(false);
+  const [joinedRole, setJoinedRole] = useState<'speaker' | 'listener'>('listener');
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [gateError, setGateError] = useState<{ message: string; details?: string } | null>(null);
@@ -490,6 +491,7 @@ function FishbowlRoomPageInner() {
         return;
       }
       await fetchRoom();
+      setJoinedRole('speaker');
       setAudioJoined(true);
     } finally {
       setJoining(false);
@@ -511,6 +513,7 @@ function FishbowlRoomPageInner() {
         return;
       }
       await fetchRoom();
+      setJoinedRole('listener');
       setAudioJoined(true);
     } finally {
       setJoining(false);
@@ -758,7 +761,7 @@ function FishbowlRoomPageInner() {
                     fishbowlSlug={room.slug}
                     userFid={user.fid}
                     userName={user.displayName || user.username || 'Anonymous'}
-                    role={isSpeaker ? 'speaker' : 'listener'}
+                    role={joinedRole}
                     isHost={isHost}
                     onLeave={() => setAudioJoined(false)}
                   />
