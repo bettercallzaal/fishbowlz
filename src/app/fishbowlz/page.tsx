@@ -89,7 +89,7 @@ export default function FishbowlzPage() {
   const [tokenGateMinBalance, setTokenGateMinBalance] = useState('1');
 
   useEffect(() => {
-    authFetch('/api/fishbowlz/rooms')
+    fetch('/api/fishbowlz/rooms')
       .then(r => r.json())
       .then(d => {
         const parsed = (d.rooms || []).map((r: FishbowlRoom & Record<string, unknown>) => ({
@@ -101,7 +101,7 @@ export default function FishbowlzPage() {
       })
       .catch(() => setRooms([]))
       .finally(() => setLoading(false));
-  }, [authFetch]);
+  }, []);
 
   const handleCreate = async () => {
     if (!user || !title.trim()) return;
