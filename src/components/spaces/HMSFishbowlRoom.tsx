@@ -213,39 +213,53 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     };
   }, []);
 
+  // Capture initial values in refs so the join effect only runs ONCE per mount.
+  // Re-renders from Realtime room updates must NOT cause leave/rejoin.
+  const joinParamsRef = useRef({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost });
+  // Only update ref on first mount — ignore subsequent prop changes
+
   useEffect(() => {
+    const { fishbowlRoomId: roomId, fishbowlSlug: slug, userFid: fid, userName: name, role: r, isHost: host } = joinParamsRef.current;
+
+    if (!roomId || !fid) return;
+
+    let cancelled = false;
     const joinRoom = async () => {
       setJoining(true);
       setError(null);
       try {
-        const hmsRole = isHost ? 'moderator' : role;
-        const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
+        const hmsRole = host ? 'moderator' : r;
+        const roomName = slug ? `fishbowl-${slug}` : undefined;
         const res = await apiFetch('/api/100ms/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),
+          body: JSON.stringify({ userId: String(fid), role: hmsRole, roomName }),
         });
+        if (cancelled) return;
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || `Token request failed (${res.status})`);
         }
         const { token } = await res.json();
-        await hmsActions.join({ userName, authToken: token });
+        if (cancelled) return;
+        await hmsActions.join({ userName: name, authToken: token });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to connect to audio');
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to connect to audio');
+        }
       } finally {
-        setJoining(false);
+        if (!cancelled) setJoining(false);
       }
     };
 
-    if (fishbowlRoomId && userFid) {
-      joinRoom();
-    }
+    joinRoom();
 
     return () => {
+      cancelled = true;
       hmsActions.leave().catch(() => {});
     };
-  }, [fishbowlRoomId, userFid, role, isHost, fishbowlSlug, userName, hmsActions, apiFetch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount only
+  }, [hmsActions, apiFetch]);
 
   const leaveRoom = async () => {
     await hmsActions.leave();
