@@ -125,7 +125,7 @@ function FishbowlRoomPageInner() {
   const searchParams = useSearchParams();
   const roomId = params.id as string;
   const inviteParam = searchParams.get('invite');
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, authFetch } = useAuth();
   const { toast } = useToast();
 
   const [room, setRoom] = useState<FishbowlRoom | null>(null);
@@ -184,7 +184,7 @@ function FishbowlRoomPageInner() {
 
   const fetchRoom = useCallback(async () => {
     try {
-      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`);
+      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`);
       if (!res.ok) throw new Error('Room not found');
       const data = await res.json();
       // Parse JSONB strings from Supabase
@@ -222,7 +222,7 @@ function FishbowlRoomPageInner() {
   const fetchTranscripts = useCallback(async () => {
     if (!room?.id) return;
     try {
-      const res = await fetch(`/api/fishbowlz/transcripts?roomId=${room.id}&limit=50`);
+      const res = await authFetch(`/api/fishbowlz/transcripts?roomId=${room.id}&limit=50`);
       if (res.ok) {
         const data = await res.json();
         setTranscripts(data.transcripts || []);
@@ -236,7 +236,7 @@ function FishbowlRoomPageInner() {
     if (!room?.id) return;
     setRecapLoading(true);
     try {
-      const res = await fetch('/api/fishbowlz/recap', {
+      const res = await authFetch('/api/fishbowlz/recap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId: room.id }),
@@ -454,7 +454,7 @@ function FishbowlRoomPageInner() {
   }, [showEndedOverlay, endedCountdown, router]);
 
   const endRoom = async () => {
-    const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+    const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'end_room' }),
@@ -472,7 +472,7 @@ function FishbowlRoomPageInner() {
     setJoining(true);
     setGateError(null);
     try {
-      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'join_speaker', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
@@ -502,7 +502,7 @@ function FishbowlRoomPageInner() {
     if (!user || joining) return;
     setJoining(true);
     try {
-      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'join_listener', fid: user.fid, username: user.username, invite: inviteParam || undefined }),
@@ -524,7 +524,7 @@ function FishbowlRoomPageInner() {
     if (!user || joining) return;
     setJoining(true);
     try {
-      await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+      await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'rotate_in', listenerFid: user.fid, listenerUsername: user.username }),
@@ -537,7 +537,7 @@ function FishbowlRoomPageInner() {
 
   const leave = async () => {
     if (!user) return;
-    const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+    const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'leave_speaker', fid: user.fid }),
@@ -555,7 +555,7 @@ function FishbowlRoomPageInner() {
     if (!room || inviteLoading) return;
     setInviteLoading(true);
     try {
-      const res = await fetch('/api/fishbowlz/invites', {
+      const res = await authFetch('/api/fishbowlz/invites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId: room.id }),
@@ -719,7 +719,7 @@ function FishbowlRoomPageInner() {
               {isHost && (
                 <button
                   onClick={async () => {
-                    await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                    await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'start_room', username: user?.username }),
@@ -827,7 +827,7 @@ function FishbowlRoomPageInner() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                                  const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ action: 'kick_speaker', targetFid: speaker.fid }),
@@ -927,7 +927,7 @@ function FishbowlRoomPageInner() {
                   <button
                     onClick={async () => {
                       if (!user) return;
-                      const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                      const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'raise_hand', fid: user.fid, username: user.username }),
@@ -1008,7 +1008,7 @@ function FishbowlRoomPageInner() {
                     <div className="flex gap-2">
                       <button
                         onClick={async () => {
-                          const res = await fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                          const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'approve_hand', targetFid: r.fid }),
