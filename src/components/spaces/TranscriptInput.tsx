@@ -7,9 +7,11 @@ interface TranscriptInputProps {
   roomId: string;
   speakerRole?: 'speaker' | 'host' | 'listener_rotated' | 'agent';
   onTranscriptAdded?: (text: string) => void;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptAdded }: TranscriptInputProps) {
+export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptAdded, authFetch }: TranscriptInputProps) {
+  const apiFetch = authFetch || fetch;
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -21,7 +23,7 @@ export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptA
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/fishbowlz/transcribe', {
+      const res = await apiFetch('/api/fishbowlz/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -52,7 +54,7 @@ export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptA
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Type what you said (for the transcript)..."
-        className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] resize-none"
+        className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
         rows={2}
         maxLength={2000}
         disabled={submitting}

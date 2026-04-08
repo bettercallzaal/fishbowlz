@@ -12,9 +12,11 @@ interface FloatingReaction {
 
 interface ReactionsProps {
   roomId: string;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function Reactions({ roomId }: ReactionsProps) {
+export function Reactions({ roomId, authFetch }: ReactionsProps) {
+  const apiFetch = authFetch || fetch;
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const counterRef = useRef(0);
 
@@ -29,7 +31,7 @@ export function Reactions({ roomId }: ReactionsProps) {
     }, 2000);
 
     // Optional: log reaction event (fire-and-forget)
-    fetch('/api/fishbowlz/events', {
+    apiFetch('/api/fishbowlz/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -38,12 +40,12 @@ export function Reactions({ roomId }: ReactionsProps) {
         roomId,
       }),
     }).catch(() => {});
-  }, [roomId]);
+  }, [roomId, apiFetch]);
 
   return (
     <>
       {/* Floating reactions container */}
-      <div className="fixed bottom-24 right-4 w-16 h-64 pointer-events-none z-40 overflow-hidden">
+      <div className="fixed bottom-32 right-4 lg:bottom-24 w-16 h-64 pointer-events-none z-40 overflow-hidden">
         {reactions.map((r) => (
           <div
             key={r.id}
@@ -62,6 +64,7 @@ export function Reactions({ roomId }: ReactionsProps) {
             key={emoji}
             onClick={() => addReaction(emoji)}
             className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/10 active:scale-90 transition-all text-lg"
+            aria-label={`React with ${emoji}`}
             title={`React with ${emoji}`}
           >
             {emoji}
