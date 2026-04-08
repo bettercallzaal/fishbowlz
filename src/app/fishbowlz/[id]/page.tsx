@@ -139,6 +139,8 @@ function FishbowlRoomPageInner() {
   const [guidanceDismissed, setGuidanceDismissed] = useState(false);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
   const [showAllTranscripts, setShowAllTranscripts] = useState(false);
+  const [recap, setRecap] = useState<string | null>(null);
+  const [recapLoading, setRecapLoading] = useState(false);
 
   // Group consecutive transcript entries from the same speaker
   const groupedTranscripts = useMemo(() => {
@@ -220,6 +222,24 @@ function FishbowlRoomPageInner() {
       }
     } catch {
       // Non-critical
+    }
+  }, [room?.id]);
+
+  const fetchRecap = useCallback(async () => {
+    if (!room?.id) return;
+    setRecapLoading(true);
+    try {
+      const res = await fetch('/api/fishbowlz/recap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: room.id }),
+      });
+      const data = await res.json();
+      if (data.recap) setRecap(data.recap);
+    } catch {
+      setRecap('Could not generate recap. Try again later.');
+    } finally {
+      setRecapLoading(false);
     }
   }, [room?.id]);
 
@@ -971,8 +991,32 @@ function FishbowlRoomPageInner() {
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {room.state === 'ended' ? '📝 Transcript Archive' : '📝 Live Transcript'}
               </h3>
+              {transcripts.length > 0 && !recap && (
+                <button
+                  onClick={fetchRecap}
+                  disabled={recapLoading}
+                  className="text-xs px-3 py-1.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
+                >
+                  {recapLoading ? 'Generating...' : 'Catch me up'}
+                </button>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {recap && (
+                <div className="mb-3 p-3 rounded-lg bg-[#f5a623]/5 border border-[#f5a623]/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-[#f5a623]">AI Recap</span>
+                    <button
+                      onClick={() => setRecap(null)}
+                      className="text-xs text-gray-500 hover:text-gray-300"
+                      aria-label="Dismiss recap"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-200 whitespace-pre-line leading-relaxed">{recap}</p>
+                </div>
+              )}
               {transcripts.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-8">
                   {room.state === 'ended' ? 'No transcript was recorded for this fishbowl.' : 'No transcript yet. Start talking!'}
