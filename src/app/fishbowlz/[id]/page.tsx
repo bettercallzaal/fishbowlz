@@ -1068,7 +1068,7 @@ function FishbowlRoomPageInner() {
         </div>
 
         {/* Sidebar — Listeners + Transcript + Chat + Reactions */}
-        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col max-h-[60vh] lg:max-h-none">
+        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col lg:h-[calc(100vh-57px)] lg:sticky lg:top-[57px]">
           {/* Listeners */}
           <div className="p-4 border-b border-white/10">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -1087,7 +1087,7 @@ function FishbowlRoomPageInner() {
           </div>
 
           {/* Live Transcript */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden max-h-[40vh] lg:max-h-none">
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {room.state === 'ended' ? '📝 Transcript Archive' : '📝 Live Transcript'}
@@ -1151,7 +1151,7 @@ function FishbowlRoomPageInner() {
           </div>
 
           {/* Room Chat */}
-          <div className="flex-1 flex flex-col border-t border-white/10 min-h-[200px]">
+          <div className="flex-1 flex flex-col border-t border-white/10 min-h-[150px] max-h-[30vh] lg:max-h-none">
             <FishbowlChat roomId={room.id} authFetch={authFetch} />
           </div>
 
