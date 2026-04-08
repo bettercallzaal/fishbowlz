@@ -60,7 +60,7 @@ export function useLiveTranscript(roomId: string, enabled: boolean) {
     recognition.lang = 'en-US';
     recognitionRef.current = recognition;
 
-    recognition.onresult = async (event: any) => {
+    recognition.onresult = async (event: SpeechRecognitionEvent) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const results = Array.from(event.results) as any[];
 

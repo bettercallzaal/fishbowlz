@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     const result = await whisperRes.json();
     return NextResponse.json({ text: result.text, model });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Transcription failed' }, { status: 500 });
   }
 }

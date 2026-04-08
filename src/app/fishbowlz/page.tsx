@@ -61,7 +61,7 @@ function timeUntil(dateStr: string): string {
 
 export default function FishbowlzPage() {
   const router = useRouter();
-  const { user, loading: authLoading, authFetch } = useAuth();
+  const { user, authFetch } = useAuth();
   const [rooms, setRooms] = useState<FishbowlRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -143,9 +143,7 @@ export default function FishbowlzPage() {
       {/* Header */}
       <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
         <div>
-          <Link href="/" className="text-xl sm:text-2xl font-bold text-[#f5a623] hover:text-[#d4941f] transition-colors">
-            FISHBOWLZ
-          </Link>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#f5a623]">FISHBOWLZ</h1>
           <p className="text-xs sm:text-sm text-gray-400">Persistent async fishbowl audio spaces</p>
         </div>
         <button
@@ -158,7 +156,7 @@ export default function FishbowlzPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a2a4a] rounded-xl p-5 sm:p-6 w-full max-w-md border border-white/10 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Create Fishbowl</h2>
             <input

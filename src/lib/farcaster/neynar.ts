@@ -1,12 +1,41 @@
 import { ENV } from '@/lib/env';
 
 const NEYNAR_BASE = 'https://api.neynar.com/v2/farcaster';
+const READ_BASE = ENV.FARCASTER_READ_API_BASE
+  ? `${ENV.FARCASTER_READ_API_BASE}/v2/farcaster`
+  : NEYNAR_BASE;
 
 function headers() {
   return {
     'Content-Type': 'application/json',
     'x-api-key': ENV.NEYNAR_API_KEY,
   };
+}
+
+/** Headers for read requests — omit API key when using free Hypersnap proxy */
+function readHeaders() {
+  if (ENV.FARCASTER_READ_API_BASE) {
+    return { 'Content-Type': 'application/json' };
+  }
+  return headers();
+}
+
+/** Fetch with failover: try READ_BASE first, fall back to NEYNAR_BASE on error */
+async function fetchWithFailover(path: string, init: RequestInit): Promise<Response> {
+  if (READ_BASE === NEYNAR_BASE) {
+    return fetch(`${NEYNAR_BASE}${path}`, init);
+  }
+  try {
+    const res = await fetch(`${READ_BASE}${path}`, init);
+    if (res.ok) return res;
+    // Non-OK from proxy — fall back to Neynar
+  } catch {
+    // Network error from proxy — fall back to Neynar
+  }
+  return fetch(`${NEYNAR_BASE}${path}`, {
+    ...init,
+    headers: headers(),
+  });
 }
 
 export async function getTrendingFeed(limit = 25, timeWindow = '24h', cursor?: string) {
@@ -16,8 +45,8 @@ export async function getTrendingFeed(limit = 25, timeWindow = '24h', cursor?: s
   });
   if (cursor) params.set('cursor', cursor);
 
-  const res = await fetch(`${NEYNAR_BASE}/feed/trending?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/feed/trending?${params}`, {
+    headers: readHeaders(),
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(10000),
   });
@@ -36,8 +65,8 @@ export async function getChannelFeed(channelId: string, cursor?: string, limit =
   });
   if (cursor) params.set('cursor', cursor);
 
-  const res = await fetch(`${NEYNAR_BASE}/feed/channels?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/feed/channels?${params}`, {
+    headers: readHeaders(),
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(10000),
   });
@@ -102,8 +131,8 @@ export async function getCastThread(hash: string) {
     reply_depth: '1',
     include_chronological_parent_casts: 'false',
   });
-  const res = await fetch(`${NEYNAR_BASE}/cast/conversation?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/cast/conversation?${params}`, {
+    headers: readHeaders(),
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(10000),
   });
@@ -117,8 +146,8 @@ export async function getCastThread(hash: string) {
 export async function getUserByFid(fid: number, viewerFid?: number) {
   const params = new URLSearchParams({ fids: String(fid) });
   if (viewerFid) params.set('viewer_fid', String(viewerFid));
-  const res = await fetch(`${NEYNAR_BASE}/user/bulk?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/user/bulk?${params}`, {
+    headers: readHeaders(),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
@@ -132,8 +161,8 @@ export async function getUserByFid(fid: number, viewerFid?: number) {
 export async function getUsersByFids(fids: number[]) {
   if (!fids.length) return [];
   const params = new URLSearchParams({ fids: fids.join(',') });
-  const res = await fetch(`${NEYNAR_BASE}/user/bulk?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/user/bulk?${params}`, {
+    headers: readHeaders(),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
@@ -145,8 +174,8 @@ export async function getUsersByFids(fids: number[]) {
 }
 
 export async function getUserByAddress(address: string) {
-  const res = await fetch(`${NEYNAR_BASE}/user/bulk-by-address?addresses=${address}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/user/bulk-by-address?addresses=${address}`, {
+    headers: readHeaders(),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
@@ -203,8 +232,8 @@ export async function searchUsers(query: string, limit = 5) {
     q: query,
     limit: String(limit),
   });
-  const res = await fetch(`${NEYNAR_BASE}/user/search?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/user/search?${params}`, {
+    headers: readHeaders(),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Neynar search error: ${res.status}`);
@@ -220,8 +249,8 @@ export async function getFollowers(fid: number, viewerFid?: number, sortType: 'd
   if (viewerFid) params.set('viewer_fid', String(viewerFid));
   if (cursor) params.set('cursor', cursor);
 
-  const res = await fetch(`${NEYNAR_BASE}/followers?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/followers?${params}`, {
+    headers: readHeaders(),
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(10000),
   });
@@ -238,8 +267,8 @@ export async function getFollowing(fid: number, viewerFid?: number, sortType: 'd
   if (viewerFid) params.set('viewer_fid', String(viewerFid));
   if (cursor) params.set('cursor', cursor);
 
-  const res = await fetch(`${NEYNAR_BASE}/following?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/following?${params}`, {
+    headers: readHeaders(),
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(10000),
   });
@@ -252,8 +281,8 @@ export async function getRelevantFollowers(targetFid: number, viewerFid: number)
     target_fid: String(targetFid),
     viewer_fid: String(viewerFid),
   });
-  const res = await fetch(`${NEYNAR_BASE}/followers/relevant?${params}`, {
-    headers: headers(),
+  const res = await fetchWithFailover(`/followers/relevant?${params}`, {
+    headers: readHeaders(),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Neynar relevant followers error: ${res.status}`);

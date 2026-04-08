@@ -217,7 +217,7 @@ function FishbowlRoomPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [roomId, user?.fid]);
+  }, [roomId, user?.fid, authFetch]);
 
   const fetchTranscripts = useCallback(async () => {
     if (!room?.id) return;
@@ -230,7 +230,7 @@ function FishbowlRoomPageInner() {
     } catch {
       // Non-critical
     }
-  }, [room?.id]);
+  }, [room?.id, authFetch]);
 
   const fetchRecap = useCallback(async () => {
     if (!room?.id) return;
@@ -248,7 +248,7 @@ function FishbowlRoomPageInner() {
     } finally {
       setRecapLoading(false);
     }
-  }, [room?.id]);
+  }, [room?.id, authFetch]);
 
   // Initial fetch + Realtime subscription for room changes
   useEffect(() => {
@@ -387,7 +387,7 @@ function FishbowlRoomPageInner() {
     const heartbeatInterval = setInterval(sendHeartbeat, 45_000);
 
     return () => clearInterval(heartbeatInterval);
-  }, [user, roomId, isSpeaker, isListener]);
+  }, [user, roomId, isSpeaker, isListener, authFetch]);
 
   // beforeunload: fire a leave request when the tab is closed
   useEffect(() => {
@@ -428,7 +428,7 @@ function FishbowlRoomPageInner() {
 
     const interval = setInterval(checkRotation, 10000); // check every 10s
     return () => clearInterval(interval);
-  }, [isHost, room?.rotation_interval_ms, room?.state, room?.current_speakers, roomId, fetchRoom]);
+  }, [isHost, room?.rotation_interval_ms, room?.state, room?.current_speakers, roomId, fetchRoom, authFetch]);
 
   // Check if guidance was previously dismissed
   useEffect(() => {
@@ -809,7 +809,7 @@ function FishbowlRoomPageInner() {
             return (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {occupiedSeats.map((speaker, i) => (
+                  {occupiedSeats.map((speaker) => (
                     <div
                       key={`speaker-${speaker.fid}`}
                       className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-[#f5a623]"
