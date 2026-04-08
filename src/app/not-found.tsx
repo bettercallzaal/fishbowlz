@@ -7,7 +7,7 @@ export default function NotFound() {
         <div className="text-6xl mb-4">🐟</div>
         <h1 className="text-3xl font-bold text-[#f5a623] mb-2">404</h1>
         <p className="text-gray-400 mb-6">
-          This fishbowl doesn't exist. It may have been removed or the link is incorrect.
+          This fishbowl does not exist. It may have been removed or the link is incorrect.
         </p>
         <Link
           href="/fishbowlz"

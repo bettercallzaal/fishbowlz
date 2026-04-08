@@ -19,7 +19,7 @@ export default function Error({
         <div className="text-6xl mb-4">🐟💨</div>
         <h1 className="text-2xl font-bold text-[#f5a623] mb-2">Something went wrong</h1>
         <p className="text-gray-400 mb-6">
-          The room hit a snag. This has been logged and we're looking into it.
+          The room hit a snag. This has been logged and we are looking into it.
         </p>
         <div className="flex gap-3 justify-center">
           <button

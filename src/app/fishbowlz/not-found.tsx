@@ -7,7 +7,7 @@ export default function FishbowlzNotFound() {
         <div className="text-6xl mb-4">🐟❓</div>
         <h1 className="text-2xl font-bold text-[#f5a623] mb-2">Room Not Found</h1>
         <p className="text-gray-400 mb-6">
-          This fishbowl doesn't exist or may have ended. Check the rooms list for active conversations.
+          This fishbowl does not exist or may have ended. Check the rooms list for active conversations.
         </p>
         <Link
           href="/fishbowlz"
