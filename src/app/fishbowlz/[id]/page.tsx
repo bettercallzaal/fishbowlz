@@ -468,7 +468,7 @@ function FishbowlRoomPageInner() {
   };
 
   const joinAsSpeaker = async () => {
-    if (!user || joining) return;
+    if (!user || joining || audioJoined) return;
     setJoining(true);
     setGateError(null);
     try {
@@ -499,7 +499,7 @@ function FishbowlRoomPageInner() {
   };
 
   const joinAsListener = async () => {
-    if (!user || joining) return;
+    if (!user || joining || audioJoined) return;
     setJoining(true);
     try {
       const res = await authFetch(`/api/fishbowlz/rooms/${roomId}`, {
