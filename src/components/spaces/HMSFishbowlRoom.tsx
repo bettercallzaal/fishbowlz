@@ -24,6 +24,7 @@ interface HMSFishbowlRoomProps {
   role: 'speaker' | 'listener';
   isHost?: boolean;
   onLeave: () => void;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 /** Renders a video element for a given track ID using the 100ms useVideo hook */
@@ -117,8 +118,9 @@ function ScreenShareView({ peerId, peerName }: { peerId: string; peerName: strin
   );
 }
 
-function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave }: HMSFishbowlRoomProps) {
+function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch }: HMSFishbowlRoomProps) {
   const hmsActions = useHMSActions();
+  const apiFetch = authFetch || fetch;
   const isConnected = useHMSStore(selectIsConnectedToRoom);
   const peers = useHMSStore(selectPeers);
   const isLocalAudioEnabled = useHMSStore(selectIsLocalAudioEnabled);
@@ -170,7 +172,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
           const text = pendingTextRef.current + ' ' + transcript;
           pendingTextRef.current = '';
           try {
-            await fetch('/api/fishbowlz/transcribe', {
+            await apiFetch('/api/fishbowlz/transcribe', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -199,7 +201,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
 
     recognition.start();
     setTranscribing(true);
-  }, [transcribing, fishbowlRoomId, userFid, userName, role, isHost]);
+  }, [transcribing, fishbowlRoomId, userFid, userName, role, isHost, apiFetch]);
 
   useEffect(() => {
     return () => {
@@ -214,7 +216,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
       try {
         const hmsRole = isHost ? 'moderator' : role;
         const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
-        const res = await fetch('/api/100ms/token', {
+        const res = await apiFetch('/api/100ms/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),
@@ -239,7 +241,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     return () => {
       hmsActions.leave().catch(() => {});
     };
-  }, [fishbowlRoomId, userFid, role, isHost, fishbowlSlug, userName, hmsActions]);
+  }, [fishbowlRoomId, userFid, role, isHost, fishbowlSlug, userName, hmsActions, apiFetch]);
 
   const leaveRoom = async () => {
     await hmsActions.leave();
@@ -252,7 +254,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     // Re-trigger by toggling state — the useEffect will re-run
     const hmsRole = isHost ? 'moderator' : role;
     const roomName = fishbowlSlug ? `fishbowl-${fishbowlSlug}` : undefined;
-    fetch('/api/100ms/token', {
+    apiFetch('/api/100ms/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: String(userFid), role: hmsRole, roomName }),

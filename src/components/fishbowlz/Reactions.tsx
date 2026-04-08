@@ -12,9 +12,11 @@ interface FloatingReaction {
 
 interface ReactionsProps {
   roomId: string;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function Reactions({ roomId }: ReactionsProps) {
+export function Reactions({ roomId, authFetch }: ReactionsProps) {
+  const apiFetch = authFetch || fetch;
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const counterRef = useRef(0);
 
@@ -29,7 +31,7 @@ export function Reactions({ roomId }: ReactionsProps) {
     }, 2000);
 
     // Optional: log reaction event (fire-and-forget)
-    fetch('/api/fishbowlz/events', {
+    apiFetch('/api/fishbowlz/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -38,7 +40,7 @@ export function Reactions({ roomId }: ReactionsProps) {
         roomId,
       }),
     }).catch(() => {});
-  }, [roomId]);
+  }, [roomId, apiFetch]);
 
   return (
     <>

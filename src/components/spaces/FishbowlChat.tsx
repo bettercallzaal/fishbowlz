@@ -13,9 +13,11 @@ interface ChatMessage {
 
 interface FishbowlChatProps {
   roomId: string;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function FishbowlChat({ roomId }: FishbowlChatProps) {
+export function FishbowlChat({ roomId, authFetch }: FishbowlChatProps) {
+  const apiFetch = authFetch || fetch;
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
@@ -62,7 +64,7 @@ export function FishbowlChat({ roomId }: FishbowlChatProps) {
     if (!text.trim() || !user || sending) return;
     setSending(true);
     try {
-      const res = await fetch('/api/fishbowlz/chat', {
+      const res = await apiFetch('/api/fishbowlz/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, text: text.trim() }),

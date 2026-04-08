@@ -13,9 +13,11 @@ interface TipButtonProps {
   speakerFid: number;
   speakerUsername: string;
   roomId: string;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function TipButton({ speakerFid, speakerUsername, roomId }: TipButtonProps) {
+export function TipButton({ speakerFid, speakerUsername, roomId, authFetch }: TipButtonProps) {
+  const apiFetch = authFetch || fetch;
   const { user } = useAuth();
   const [showAmounts, setShowAmounts] = useState(false);
   const [tipped, setTipped] = useState(false);
@@ -26,7 +28,7 @@ export function TipButton({ speakerFid, speakerUsername, roomId }: TipButtonProp
     setSending(true);
     try {
       // Log tip event to Supabase (wallet transfer will be added when Privy wallets are wired)
-      await fetch('/api/fishbowlz/events', {
+      await apiFetch('/api/fishbowlz/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

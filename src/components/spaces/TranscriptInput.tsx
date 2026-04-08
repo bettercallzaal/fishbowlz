@@ -7,9 +7,11 @@ interface TranscriptInputProps {
   roomId: string;
   speakerRole?: 'speaker' | 'host' | 'listener_rotated' | 'agent';
   onTranscriptAdded?: (text: string) => void;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptAdded }: TranscriptInputProps) {
+export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptAdded, authFetch }: TranscriptInputProps) {
+  const apiFetch = authFetch || fetch;
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -21,7 +23,7 @@ export function TranscriptInput({ roomId, speakerRole = 'speaker', onTranscriptA
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/fishbowlz/transcribe', {
+      const res = await apiFetch('/api/fishbowlz/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -376,7 +376,7 @@ function FishbowlRoomPageInner() {
     if (!user || !roomId || (!isSpeaker && !isListener)) return;
 
     const sendHeartbeat = () => {
-      fetch(`/api/fishbowlz/rooms/${roomId}`, {
+      authFetch(`/api/fishbowlz/rooms/${roomId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'heartbeat', fid: user.fid }),
@@ -418,7 +418,7 @@ function FishbowlRoomPageInner() {
       const seatedMs = Date.now() - new Date(oldest.joinedAt).getTime();
       if (seatedMs >= room.rotation_interval_ms!) {
         // Auto-rotate: kick the oldest speaker
-        fetch(`/api/fishbowlz/rooms/${roomId}`, {
+        authFetch(`/api/fishbowlz/rooms/${roomId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'kick_speaker', targetFid: oldest.fid }),
@@ -764,6 +764,7 @@ function FishbowlRoomPageInner() {
                     role={joinedRole}
                     isHost={isHost}
                     onLeave={() => setAudioJoined(false)}
+                    authFetch={authFetch}
                   />
                 </div>
               )}
@@ -776,6 +777,7 @@ function FishbowlRoomPageInner() {
                     roomId={room.id}
                     speakerRole={isHost ? 'host' : 'speaker'}
                     onTranscriptAdded={() => fetchTranscripts()}
+                    authFetch={authFetch}
                   />
                 </div>
               )}
@@ -847,6 +849,7 @@ function FishbowlRoomPageInner() {
                               speakerFid={speaker.fid}
                               speakerUsername={speaker.username}
                               roomId={room.id}
+                              authFetch={authFetch}
                             />
                           </div>
                         </div>
@@ -1125,13 +1128,13 @@ function FishbowlRoomPageInner() {
 
           {/* Room Chat */}
           <div className="flex-1 flex flex-col border-t border-white/10 min-h-[200px]">
-            <FishbowlChat roomId={room.id} />
+            <FishbowlChat roomId={room.id} authFetch={authFetch} />
           </div>
 
           {/* Reactions */}
           {room.state === 'active' && (
             <div className="p-3 border-t border-white/10">
-              <Reactions roomId={room.id} />
+              <Reactions roomId={room.id} authFetch={authFetch} />
             </div>
           )}
         </div>
@@ -1163,7 +1166,7 @@ function FishbowlRoomPageInner() {
               setAudioJoined(false);
               if (user) {
                 const action = isSpeaker ? 'leave_speaker' : 'leave_listener';
-                fetch(`/api/fishbowlz/rooms/${roomId}`, {
+                authFetch(`/api/fishbowlz/rooms/${roomId}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action, fid: user.fid }),
