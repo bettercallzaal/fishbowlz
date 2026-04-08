@@ -79,7 +79,7 @@ export async function verifyPrivyToken(authHeader: string | null): Promise<{
     if (userId) {
       try {
         const client = getPrivyClient();
-        const privyUser = await client.users().get(userId);
+        const privyUser = await client.users()._get(userId);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const accounts = (privyUser as any)?.linked_accounts as Array<{ type: string; fid?: number; username?: string; address?: string }> | undefined;
         const linkedFc = accounts?.find((a) => a.type === 'farcaster' && a.fid);
