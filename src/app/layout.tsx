@@ -5,10 +5,19 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   title: 'FISHBOWLZ — Persistent Audio Rooms',
   description: 'Hot seat audio rooms with live transcripts, chat, and rotation. Built on Farcaster.',
+  icons: {
+    icon: '/favicon.svg',
+  },
   openGraph: {
     title: 'FISHBOWLZ',
     description: 'Persistent audio rooms with hot seat rotation',
     siteName: 'FISHBOWLZ',
+    url: 'https://fishbowlz.com',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FISHBOWLZ — Persistent Audio Rooms',
+    description: 'Hot seat audio rooms with live transcripts, chat, and rotation. Built on Farcaster.',
   },
 };
 

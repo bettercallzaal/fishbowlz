@@ -43,19 +43,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: cannot generate token for another user' }, { status: 403 });
     }
 
-    // Role validation — non-admins cannot request host role unless they're a verified fishbowl host
-    let isFishbowlHost = false;
-    if (roomName?.startsWith('fishbowl-') && (role === 'host' || role === 'moderator')) {
-      const { data: fishbowlRoom } = await supabaseAdmin
-        .from('fishbowl_rooms')
-        .select('host_fid')
-        .or(`slug.eq.${roomName.replace('fishbowl-', '')},id.eq.${roomId}`)
-        .single();
-
-      isFishbowlHost = fishbowlRoom?.host_fid === session.fid;
-    }
-    if ((role === 'host' || role === 'moderator') && !session.isAdmin && !isFishbowlHost) {
-      return NextResponse.json({ error: 'Forbidden: only admins can request moderator role' }, { status: 403 });
+    // Role validation — downgrade moderator/host to speaker if not verified host
+    let effectiveRole = role;
+    if (role === 'host' || role === 'moderator') {
+      let isFishbowlHost = false;
+      if (roomName?.startsWith('fishbowl-')) {
+        const slug = roomName.replace('fishbowl-', '');
+        const { data: fishbowlRoom } = await supabaseAdmin
+          .from('fishbowl_rooms')
+          .select('host_fid')
+          .or(`slug.eq.${slug},id.eq.${roomId || '00000000-0000-0000-0000-000000000000'}`)
+          .single();
+        isFishbowlHost = fishbowlRoom?.host_fid === session.fid;
+      }
+      if (!session.isAdmin && !isFishbowlHost) {
+        // Downgrade to speaker instead of blocking - user can still participate
+        effectiveRole = 'speaker';
+      }
     }
 
     // Generate management token
@@ -109,7 +113,7 @@ export async function POST(req: NextRequest) {
         access_key: accessKey,
         room_id: hmsRoomId,
         user_id: userId,
-        role,
+        role: effectiveRole,
         type: 'app',
         version: 2,
         iat: Math.floor(Date.now() / 1000),
@@ -125,7 +129,7 @@ export async function POST(req: NextRequest) {
       action: '100ms.token.generate',
       targetType: 'user',
       targetId: userId,
-      details: { userId, role, roomId: hmsRoomId },
+      details: { userId, role: effectiveRole, roomId: hmsRoomId },
       ipAddress: getClientIp(req),
     });
 
