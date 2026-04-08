@@ -120,7 +120,10 @@ function ScreenShareView({ peerId, peerName }: { peerId: string; peerName: strin
 
 function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName, role, isHost, onLeave, authFetch }: HMSFishbowlRoomProps) {
   const hmsActions = useHMSActions();
-  const apiFetch = authFetch || fetch;
+  // Stable reference to avoid re-triggering effects when authFetch changes identity
+  const apiFetchRef = useRef(authFetch || fetch);
+  apiFetchRef.current = authFetch || fetch;
+  const apiFetch = useCallback((...args: Parameters<typeof fetch>) => apiFetchRef.current(...args), []);
   const isConnected = useHMSStore(selectIsConnectedToRoom);
   const peers = useHMSStore(selectPeers);
   const isLocalAudioEnabled = useHMSStore(selectIsLocalAudioEnabled);
