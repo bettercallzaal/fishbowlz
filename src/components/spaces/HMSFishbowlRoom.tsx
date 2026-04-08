@@ -357,7 +357,13 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
   };
 
   const toggleVideo = async () => {
-    await hmsActions.setLocalVideoEnabled(!isLocalVideoEnabled);
+    try {
+      await hmsActions.setLocalVideoEnabled(!isLocalVideoEnabled);
+    } catch (err) {
+      console.error('Camera toggle failed:', err);
+      // Most likely the role doesn't have video publish permission
+      alert('Camera is not available. Your role may not have video permission, or camera access was denied.');
+    }
   };
 
   if (error) {

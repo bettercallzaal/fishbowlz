@@ -1170,7 +1170,7 @@ function FishbowlRoomPageInner() {
       )}
 
       {/* Sticky mobile audio controls */}
-      {audioJoined && user && room?.state === 'active' && (
+      {audioJoined && (user || guestMode) && room?.state === 'active' && (
         <div
           className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0d1b2a] border-t border-white/10 px-4 py-3 flex items-center justify-between"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -1188,6 +1188,7 @@ function FishbowlRoomPageInner() {
           <button
             onClick={() => {
               setAudioJoined(false);
+              setGuestMode(false);
               if (user) {
                 const action = isSpeaker ? 'leave_speaker' : 'leave_listener';
                 authFetch(`/api/fishbowlz/rooms/${roomId}`, {
