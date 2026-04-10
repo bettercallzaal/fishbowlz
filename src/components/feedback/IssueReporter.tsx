@@ -109,8 +109,8 @@ export function IssueReporter() {
                   onClick={() => setType(t)}
                   className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
                     type === t
-                      ? 'bg-[#f5a623] text-[#0a1628]'
-                      : 'bg-[#0a1628] border border-white/20 text-gray-400 hover:text-white'
+                      ? 'bg-gold text-navy'
+                      : 'bg-navy border border-white/20 text-gray-400 hover:text-white'
                   }`}
                 >
                   {t === 'bug' ? '🐛 Bug' : t === 'feature' ? '💡 Feature' : '💬 Feedback'}
@@ -124,7 +124,7 @@ export function IssueReporter() {
               placeholder="Short title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] text-sm min-h-[44px]"
+              className="w-full bg-navy border border-white/20 rounded-lg px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-gold text-sm min-h-[44px]"
               maxLength={200}
             />
 
@@ -133,7 +133,7 @@ export function IssueReporter() {
               placeholder="What happened? What did you expect?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#f5a623] resize-none text-sm"
+              className="w-full bg-navy border border-white/20 rounded-lg px-4 py-3 mb-3 text-white placeholder-gray-500 focus:outline-none focus:border-gold resize-none text-sm"
               rows={4}
               maxLength={2000}
             />
@@ -159,7 +159,6 @@ export function IssueReporter() {
               />
               {screenshot ? (
                 <div className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={screenshot} alt="Screenshot" className="w-full h-32 object-cover rounded-lg border border-white/10" />
                   <button
                     onClick={() => setScreenshot(null)}
@@ -189,7 +188,7 @@ export function IssueReporter() {
             <button
               onClick={handleSubmit}
               disabled={submitting || !title.trim() || !description.trim()}
-              className="w-full bg-[#f5a623] text-[#0a1628] font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
+              className="w-full bg-gold text-navy font-semibold py-3 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
             >
               {submitting ? 'Submitting...' : 'Submit'}
             </button>

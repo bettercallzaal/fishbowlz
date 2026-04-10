@@ -71,7 +71,7 @@ function Countdown({ targetDate }: { targetDate: string }) {
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  return <span className="text-2xl font-mono font-bold text-[#f5a623]">{remaining}</span>;
+  return <span className="text-2xl font-mono font-bold text-gold">{remaining}</span>;
 }
 
 const HMSFishbowlRoom = dynamic(
@@ -117,6 +117,20 @@ interface TranscriptSegment {
   started_at: string;
 }
 
+type TranscriptMode = 'full' | 'summary' | 'highlights' | 'decisions' | 'actions';
+type MemoryMode = 'short' | 'full' | 'decisions' | 'actions' | 'moments';
+type BotState = 'invited' | 'listening' | 'live' | 'processing' | 'ready';
+type RoomMode = 'discussion' | 'meeting' | 'classroom' | 'concert' | 'radio' | 'listening_party';
+
+function timestampLabel(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 // ─── Inner component (needs ToastProvider above it) ──────────────────────────
 
 function FishbowlRoomPageInner() {
@@ -149,30 +163,82 @@ function FishbowlRoomPageInner() {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
+  const [memoryMode, setMemoryMode] = useState<MemoryMode>('short');
+  const [transcriptMode, setTranscriptMode] = useState<TranscriptMode>('full');
+  const [transcriptQuery, setTranscriptQuery] = useState('');
+  const [botState, setBotState] = useState<BotState>('invited');
+  const [botConsent, setBotConsent] = useState(true);
+  const [botAdminLock, setBotAdminLock] = useState(true);
+  const [roomMode, setRoomMode] = useState<RoomMode>('discussion');
+  const [externalAudioUrl, setExternalAudioUrl] = useState('');
+  const [externalQueue, setExternalQueue] = useState<string[]>([]);
+  const [externalPlaying, setExternalPlaying] = useState(false);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [archiveQuery, setArchiveQuery] = useState('');
+  const [archiveFilter, setArchiveFilter] = useState<'all' | 'summary' | 'decisions' | 'actions' | 'moments'>('all');
   // Stable guest username so it doesn't change on re-render
   const guestNameRef = useRef(`Guest-${Math.floor(1000 + Math.random() * 9000)}`);
 
-  // Group consecutive transcript entries from the same speaker
-  const groupedTranscripts = useMemo(() => {
-    if (!transcripts.length) return [];
-    const groups: { speaker: string; role: string; timestamp: string; segments: string[] }[] = [];
-    for (const t of transcripts) {
-      const last = groups[groups.length - 1];
-      if (last && last.speaker === (t.speaker_name || 'Unknown')) {
-        last.segments.push(t.text);
-      } else {
-        groups.push({
-          speaker: t.speaker_name || 'Unknown',
-          role: t.speaker_role || 'speaker',
-          timestamp: t.started_at,
-          segments: [t.text],
-        });
-      }
-    }
-    return groups;
-  }, [transcripts]);
+  const transcriptInsights = useMemo(() => {
+    const lines = transcripts.map((t) => normalizeText(t.text)).filter(Boolean);
+    const fullText = lines.join(' ');
+    const sentences = fullText.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 20);
 
-  const visibleGroups = showAllTranscripts ? groupedTranscripts : groupedTranscripts.slice(0, 10);
+    const summary = recap || room?.ai_summary || (sentences.slice(0, 4).join(' ') || 'Summary is generating as the room continues.');
+    const highlights = transcripts
+      .filter((t) => /\!|\?|important|notable|highlight|key|milestone|launch|vote/i.test(t.text))
+      .slice(-8);
+    const decisions = transcripts
+      .filter((t) => /(decide|decision|agreed|approved|ship|final|resolved|vote)/i.test(t.text))
+      .slice(-8);
+    const actions = transcripts
+      .filter((t) => /(action|todo|owner|follow up|next step|by friday|by monday|deadline|assign)/i.test(t.text))
+      .slice(-8);
+
+    const keyMoments = transcripts
+      .filter((t) => /(applause|laugh|cheer|reaction|quote|insight|breakthrough|milestone)/i.test(t.text))
+      .slice(-8);
+
+    return {
+      summary,
+      highlights: highlights.length ? highlights : transcripts.slice(-6),
+      decisions: decisions.length ? decisions : transcripts.slice(-4),
+      actions: actions.length ? actions : transcripts.slice(-4),
+      keyMoments: keyMoments.length ? keyMoments : transcripts.slice(-4),
+    };
+  }, [transcripts, recap, room?.ai_summary]);
+
+  const transcriptModeItems = useMemo(() => {
+    if (transcriptMode === 'summary') {
+      return [{ id: 'summary', speaker_name: 'AI Memory', speaker_role: 'summary', text: transcriptInsights.summary, started_at: new Date().toISOString() }];
+    }
+    if (transcriptMode === 'highlights') return transcriptInsights.highlights;
+    if (transcriptMode === 'decisions') return transcriptInsights.decisions;
+    if (transcriptMode === 'actions') return transcriptInsights.actions;
+    return transcripts;
+  }, [transcriptMode, transcriptInsights, transcripts]);
+
+  const filteredTranscriptItems = useMemo(() => {
+    const q = transcriptQuery.trim().toLowerCase();
+    if (!q) return transcriptModeItems;
+    return transcriptModeItems.filter((t) =>
+      [t.speaker_name, t.speaker_role, t.text].join(' ').toLowerCase().includes(q)
+    );
+  }, [transcriptModeItems, transcriptQuery]);
+
+  const archiveEntries = useMemo(() => {
+    const base = [
+      { id: 'sum', type: 'summary', title: 'Session Summary', text: transcriptInsights.summary },
+      ...transcriptInsights.decisions.map((d) => ({ id: `d-${d.id}`, type: 'decisions', title: `Decision by ${d.speaker_name}`, text: d.text })),
+      ...transcriptInsights.actions.map((a) => ({ id: `a-${a.id}`, type: 'actions', title: `Action item from ${a.speaker_name}`, text: a.text })),
+      ...transcriptInsights.keyMoments.map((m) => ({ id: `m-${m.id}`, type: 'moments', title: `Moment: ${m.speaker_name}`, text: m.text })),
+    ];
+    return base.filter((entry) => {
+      const typeMatch = archiveFilter === 'all' || entry.type === archiveFilter;
+      const queryMatch = !archiveQuery.trim() || `${entry.title} ${entry.text}`.toLowerCase().includes(archiveQuery.trim().toLowerCase());
+      return typeMatch && queryMatch;
+    });
+  }, [transcriptInsights, archiveFilter, archiveQuery]);
 
   const isHost = user?.fid === room?.host_fid;
   const isSpeaker = room?.current_speakers?.some((s) => s.fid === user?.fid);
@@ -576,9 +642,86 @@ function FishbowlRoomPageInner() {
     }
   };
 
+  const copyCurrentTranscript = async () => {
+    const text = filteredTranscriptItems
+      .map((item) => `[${timestampLabel(item.started_at)}] ${item.speaker_name}: ${item.text}`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text || 'No transcript content available yet.');
+      toast('Transcript copied', 'success');
+    } catch {
+      toast('Copy failed', 'error');
+    }
+  };
+
+  const downloadJsonExport = () => {
+    const payload = {
+      room: {
+        id: room.id,
+        slug: room.slug,
+        title: room.title,
+        mode: roomMode,
+        host: room.host_username,
+        createdAt: room.created_at,
+      },
+      outputs: {
+        summary: transcriptInsights.summary,
+        decisions: transcriptInsights.decisions,
+        actions: transcriptInsights.actions,
+        highlights: transcriptInsights.highlights,
+        fullTranscript: transcripts,
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${room.slug || room.id}-transcript.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openPdfReadyView = () => {
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      toast('Please allow popups for PDF view', 'error');
+      return;
+    }
+    const body = filteredTranscriptItems
+      .map((item) => `<p><strong>[${timestampLabel(item.started_at)}] ${item.speaker_name}</strong>: ${item.text}</p>`)
+      .join('');
+    popup.document.write(`
+      <html>
+        <head><title>${room.title} Transcript</title></head>
+        <body style="font-family: Inter, Arial, sans-serif; padding: 24px;">
+          <h1>${room.title}</h1>
+          <p>Export mode: ${transcriptMode}</p>
+          ${body || '<p>No transcript content yet.</p>'}
+        </body>
+      </html>
+    `);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  };
+
+  const memoryOutput = useMemo(() => {
+    if (memoryMode === 'full') return transcriptInsights.summary;
+    if (memoryMode === 'decisions') {
+      return transcriptInsights.decisions.map((d) => `- ${d.text}`).join('\n') || 'No decisions captured yet.';
+    }
+    if (memoryMode === 'actions') {
+      return transcriptInsights.actions.map((a) => `- ${a.text}`).join('\n') || 'No action items captured yet.';
+    }
+    if (memoryMode === 'moments') {
+      return transcriptInsights.keyMoments.map((m) => `- ${m.text}`).join('\n') || 'No key moments captured yet.';
+    }
+    return transcriptInsights.summary.split('. ').slice(0, 2).join('. ');
+  }, [memoryMode, transcriptInsights]);
+
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-[#0a1628] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-navy text-white flex items-center justify-center">
         <div className="text-gray-400">Loading fishbowl...</div>
       </div>
     );
@@ -586,9 +729,9 @@ function FishbowlRoomPageInner() {
 
   if (error || !room) {
     return (
-      <div className="min-h-screen bg-[#0a1628] text-white flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center">
         <p className="text-gray-400 mb-4">{error || 'Room not found'}</p>
-        <button onClick={() => router.push('/fishbowlz')} className="text-[#f5a623] hover:underline">
+        <button onClick={() => router.push('/fishbowlz')} className="text-gold hover:underline">
           ← Back to rooms
         </button>
       </div>
@@ -596,7 +739,7 @@ function FishbowlRoomPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-white flex flex-col">
+    <div className="min-h-screen bg-navy text-white flex flex-col">
       {/* Header */}
       <div className="border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
@@ -629,7 +772,7 @@ function FishbowlRoomPageInner() {
             <button
               onClick={generateInvite}
               disabled={inviteLoading}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gold/10 text-gold hover:bg-gold/20 transition-colors disabled:opacity-50"
             >
               {inviteLoading ? '...' : 'Invite'}
             </button>
@@ -646,7 +789,7 @@ function FishbowlRoomPageInner() {
           )}
           <span className={`text-xs px-2 py-1 rounded-full ${
             room.state === 'active'
-              ? 'bg-[#f5a623]/20 text-[#f5a623]'
+              ? 'bg-gold/20 text-gold'
               : 'bg-gray-600/20 text-gray-400'
           }`}>
             {room.state}
@@ -664,7 +807,7 @@ function FishbowlRoomPageInner() {
       </div>
 
       {inviteCode && (
-        <div className="px-4 sm:px-6 py-2 border-b border-white/10 bg-white/[0.02]">
+        <div className="px-4 sm:px-6 py-2 border-b border-white/10 bg-white/2">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
             <span className="text-xs text-gray-400 truncate flex-1">
               fishbowlz.com/fishbowlz/{room.slug}?invite={inviteCode}
@@ -674,7 +817,7 @@ function FishbowlRoomPageInner() {
                 navigator.clipboard.writeText(`https://fishbowlz.com/fishbowlz/${room.slug}?invite=${inviteCode}`);
                 toast('Invite link copied!', 'success');
               }}
-              className="text-xs text-[#f5a623] hover:text-[#d4941f] shrink-0"
+              className="text-xs text-gold hover:text-[#d4941f] shrink-0"
             >
               Copy
             </button>
@@ -689,14 +832,14 @@ function FishbowlRoomPageInner() {
       )}
 
       {showGuidance && (
-        <div className="bg-[#f5a623]/10 border-b border-[#f5a623]/20 px-4 py-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-[#f5a623]">💡 {guidanceMessage}</p>
+        <div className="bg-gold/10 border-b border-gold/20 px-4 py-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-gold">💡 {guidanceMessage}</p>
           <button
             onClick={() => {
               setGuidanceDismissed(true);
               localStorage.setItem('fishbowlz-guidance-dismissed', '1');
             }}
-            className="text-[#f5a623]/50 hover:text-[#f5a623] text-xs shrink-0"
+            className="text-gold/50 hover:text-gold text-xs shrink-0"
           >
             ✕
           </button>
@@ -729,7 +872,7 @@ function FishbowlRoomPageInner() {
                     });
                     await fetchRoom();
                   }}
-                  className="mt-4 bg-[#f5a623] text-[#0a1628] font-bold px-8 py-3 rounded-full hover:bg-[#d4941f] transition-all hover:shadow-[0_0_30px_rgba(245,166,35,0.3)]"
+                  className="mt-4 bg-gold text-navy font-bold px-8 py-3 rounded-full hover:bg-[#d4941f] transition-all hover:shadow-[0_0_30px_rgba(245,166,35,0.3)]"
                 >
                   Start Now
                 </button>
@@ -742,14 +885,14 @@ function FishbowlRoomPageInner() {
 
           {/* Ended banner */}
           {room.state === 'ended' && (
-            <div className="mb-4 p-3 bg-gray-800/50 rounded-lg border border-white/[0.08] text-center">
+            <div className="mb-4 p-3 bg-gray-800/50 rounded-lg border border-white/8 text-center">
               <p className="text-gray-400 text-sm">This fishbowl has ended</p>
             </div>
           )}
 
           {room.state === 'ended' && room.ai_summary && (
             <div className="mb-4 p-4 bg-[#1a2a4a] rounded-xl border border-white/10">
-              <h3 className="text-xs font-semibold text-[#f5a623] uppercase tracking-wider mb-2">AI Summary</h3>
+              <h3 className="text-xs font-semibold text-gold uppercase tracking-wider mb-2">AI Summary</h3>
               <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{room.ai_summary}</p>
             </div>
           )}
@@ -792,6 +935,174 @@ function FishbowlRoomPageInner() {
             </>
           )}
 
+          <div className="mb-6 grid gap-4">
+            <div className="rounded-xl border border-white/10 bg-[#111f38] p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-xs font-semibold text-gold uppercase tracking-wider">AI Memory</h3>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ['short', 'Short'],
+                    ['full', 'Full'],
+                    ['decisions', 'Decisions'],
+                    ['actions', 'Actions'],
+                    ['moments', 'Moments'],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setMemoryMode(key as MemoryMode)}
+                      className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                        memoryMode === key ? 'border-gold text-gold bg-gold/10' : 'border-white/10 text-gray-400'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-200 whitespace-pre-line leading-relaxed">{memoryOutput || 'Join the room to generate AI memory outputs.'}</p>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: 'Join Late', value: 'Catch-up ready' },
+                  { label: 'Decisions', value: `${transcriptInsights.decisions.length}` },
+                  { label: 'Actions', value: `${transcriptInsights.actions.length}` },
+                  { label: 'Moments', value: `${transcriptInsights.keyMoments.length}` },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500">{stat.label}</p>
+                    <p className="text-xs text-gray-200">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#101d34] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Bot Listener</h3>
+                <div className="flex items-center gap-2">
+                  {(['invited', 'listening', 'live', 'processing', 'ready'] as BotState[]).map((state) => (
+                    <button
+                      key={state}
+                      onClick={() => setBotState(state)}
+                      className={`text-[10px] uppercase px-2 py-1 rounded-full border ${
+                        botState === state ? 'border-gold text-gold' : 'border-white/10 text-gray-500'
+                      }`}
+                    >
+                      {state}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-2 mb-3">
+                <label className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                  Consent indicator
+                  <input type="checkbox" checked={botConsent} onChange={(e) => setBotConsent(e.target.checked)} />
+                </label>
+                <label className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                  Admin join lock
+                  <input type="checkbox" checked={botAdminLock} onChange={(e) => setBotAdminLock(e.target.checked)} />
+                </label>
+              </div>
+              <p className="text-xs text-gray-400">
+                Privacy: bot joins only when consent is visible and admin controls are enabled. State: <span className="text-gold">{botState}</span>.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#101a2f] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Room Mode</h3>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ['discussion', 'Discussion'],
+                    ['meeting', 'Meeting'],
+                    ['classroom', 'Classroom'],
+                    ['concert', 'Concert'],
+                    ['radio', 'Radio'],
+                    ['listening_party', 'Listening Party'],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setRoomMode(key as RoomMode)}
+                      className={`text-[11px] px-2 py-1 rounded-full border ${
+                        roomMode === key ? 'border-gold text-gold' : 'border-white/10 text-gray-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-300">
+                {roomMode === 'meeting' && 'Meeting mode emphasizes decisions, owners, and follow-up actions.'}
+                {roomMode === 'concert' && 'Concert mode emphasizes external playback, moments, and audience reactions.'}
+                {roomMode === 'classroom' && 'Classroom mode emphasizes chaptered replay and key lesson moments.'}
+                {roomMode === 'radio' && 'Radio mode emphasizes seamless listening and archive continuity.'}
+                {roomMode === 'listening_party' && 'Listening party mode emphasizes shared playback and highlights.'}
+                {roomMode === 'discussion' && 'Discussion mode balances open talk, hot seat rotation, and transcript coverage.'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#0f1b32] p-4">
+              <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider mb-3">External Audio Playback</h3>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="url"
+                  value={externalAudioUrl}
+                  onChange={(e) => setExternalAudioUrl(e.target.value)}
+                  placeholder="https://.../audio.mp3"
+                  className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                />
+                <button
+                  onClick={() => {
+                    if (!externalAudioUrl.trim()) return;
+                    setExternalQueue((prev) => [...prev, externalAudioUrl.trim()]);
+                    setExternalAudioUrl('');
+                    toast('Added to playback queue', 'success');
+                  }}
+                  className="px-3 py-2 rounded-lg bg-gold text-navy text-sm font-semibold"
+                >
+                  Queue
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  onClick={() => {
+                    setExternalLoading(true);
+                    setTimeout(() => {
+                      setExternalLoading(false);
+                      setExternalPlaying((v) => !v);
+                    }, 450);
+                  }}
+                  className="px-3 py-2 rounded-lg border border-white/15 text-xs"
+                >
+                  {externalLoading ? 'Buffering...' : externalPlaying ? 'Pause media' : 'Play media'}
+                </button>
+                <span className="text-xs text-gray-500">Live room audio remains separate from hosted media playback.</span>
+              </div>
+              <audio controls className="w-full" src={externalQueue[0] || room.audio_source_url || undefined} />
+              {externalQueue.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {externalQueue.slice(0, 3).map((url, idx) => (
+                    <p key={`${url}-${idx}`} className="text-[11px] text-gray-400 truncate">{idx + 1}. {url}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#101d34] p-4">
+              <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider mb-3">Session Replay</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs text-gray-500 mb-1">Chaptered Replay</p>
+                  <p className="text-sm text-gray-300">Jump by topic, not by random scrub points.</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs text-gray-500 mb-1">Speaker Timeline</p>
+                  <p className="text-sm text-gray-300">See who spoke most and when decisions happened.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">🔥 Hot Seat</h2>
           {(() => {
             const occupiedSeats = room.current_speakers || [];
@@ -820,10 +1131,10 @@ function FishbowlRoomPageInner() {
                   {occupiedSeats.map((speaker) => (
                     <div
                       key={`speaker-${speaker.fid}`}
-                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-[#f5a623]"
+                      className="rounded-xl p-4 border-2 transition-colors bg-[#1a2a4a] border-gold"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 flex items-center justify-center text-[#f5a623] font-bold text-sm">
+                        <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center text-gold font-bold text-sm">
                           {speaker.username[0].toUpperCase()}
                         </div>
                         <div>
@@ -927,7 +1238,7 @@ function FishbowlRoomPageInner() {
                     <button
                       onClick={joinAsSpeaker}
                       disabled={joining}
-                      className="bg-[#f5a623] text-[#0a1628] font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
+                      className="bg-gold text-navy font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
                     >
                       {joining ? 'Joining...' : 'Join Audio'}
                     </button>
@@ -967,14 +1278,14 @@ function FishbowlRoomPageInner() {
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                       room.hand_raises?.some((r) => r.fid === user?.fid)
-                        ? 'bg-[#f5a623]/20 text-[#f5a623] border border-[#f5a623]/30'
+                        ? 'bg-gold/20 text-gold border border-gold/30'
                         : 'border border-white/20 hover:bg-white/5'
                     }`}
                   >
                     {room.hand_raises?.some((r) => r.fid === user?.fid) ? '✋ Hand Raised' : '✋ Raise Hand'}
                   </button>
                   {room.hand_raises?.some((r) => r.fid === user?.fid) && (
-                    <span className="text-xs text-[#f5a623]">
+                    <span className="text-xs text-gold">
                       You&apos;re #{(room.hand_raises?.findIndex((r) => r.fid === user?.fid) ?? 0) + 1} in queue
                     </span>
                   )}
@@ -982,7 +1293,7 @@ function FishbowlRoomPageInner() {
                     <button
                       onClick={rotateIn}
                       disabled={!room.rotation_enabled || joining}
-                      className="bg-[#f5a623] text-[#0a1628] font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
+                      className="bg-gold text-navy font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
                     >
                       Rotate in
                     </button>
@@ -990,7 +1301,7 @@ function FishbowlRoomPageInner() {
                     <button
                       onClick={joinAsSpeaker}
                       disabled={hotSeatFull || joining}
-                      className="bg-[#f5a623] text-[#0a1628] font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
+                      className="bg-gold text-navy font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
                     >
                       {hotSeatFull ? 'Hot seat full' : 'Join hot seat'}
                     </button>
@@ -1001,7 +1312,7 @@ function FishbowlRoomPageInner() {
                   <button
                     onClick={joinAsSpeaker}
                     disabled={hotSeatFull || joining}
-                    className="bg-[#f5a623] text-[#0a1628] font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
+                    className="bg-gold text-navy font-semibold px-4 py-2 rounded-lg hover:bg-[#d4941f] transition-colors disabled:opacity-50 min-h-[44px]"
                   >
                     {hotSeatFull ? 'Hot seat full' : 'Join hot seat'}
                   </button>
@@ -1018,15 +1329,15 @@ function FishbowlRoomPageInner() {
 
           {/* Hand raise queue — host only */}
           {isHost && room.hand_raises && room.hand_raises.length > 0 && (
-            <div className="mt-4 p-3 bg-[#1a2a4a] rounded-xl border border-[#f5a623]/20">
-              <h4 className="text-xs font-semibold text-[#f5a623] uppercase tracking-wider mb-2">
+            <div className="mt-4 p-3 bg-[#1a2a4a] rounded-xl border border-gold/20">
+              <h4 className="text-xs font-semibold text-gold uppercase tracking-wider mb-2">
                 ✋ Hand Raises ({room.hand_raises.length})
               </h4>
               <div className="space-y-2">
                 {room.hand_raises.map((r, index) => (
                   <div key={r.fid} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-[#f5a623] bg-[#f5a623]/10 w-6 h-6 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-mono text-gold bg-gold/10 w-6 h-6 rounded-full flex items-center justify-center">
                         {index + 1}
                       </span>
                       <span className="text-sm text-white truncate max-w-[120px]">@{r.username}</span>
@@ -1048,7 +1359,7 @@ function FishbowlRoomPageInner() {
                             toast(err.error || 'Failed to approve', 'error');
                           }
                         }}
-                        className="text-xs px-2 py-1 bg-[#f5a623]/15 text-[#ffd700] rounded hover:bg-[#f5a623]/25 transition-colors"
+                        className="text-xs px-2 py-1 bg-gold/15 text-gold-light rounded hover:bg-gold/25 transition-colors"
                       >
                         Approve
                       </button>
@@ -1086,27 +1397,71 @@ function FishbowlRoomPageInner() {
             </div>
           </div>
 
-          {/* Live Transcript */}
-          <div className="flex-1 flex flex-col overflow-hidden max-h-[40vh] lg:max-h-none">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                {room.state === 'ended' ? '📝 Transcript Archive' : '📝 Live Transcript'}
-              </h3>
-              {transcripts.length > 0 && !recap && (
-                <button
-                  onClick={fetchRecap}
-                  disabled={recapLoading}
-                  className="text-xs px-3 py-1.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] hover:bg-[#f5a623]/20 transition-colors disabled:opacity-50"
-                >
-                  {recapLoading ? 'Generating...' : 'Catch me up'}
+          {/* Transcript + Archive */}
+          <div className="flex-1 flex flex-col overflow-hidden max-h-[42vh] lg:max-h-none">
+            <div className="p-4 border-b border-white/10 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  {room.state === 'ended' ? 'Transcript Archive' : 'Live Transcript'}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {transcripts.length > 0 && !recap && (
+                    <button
+                      onClick={fetchRecap}
+                      disabled={recapLoading}
+                      className="text-xs px-2 py-1 rounded-full bg-gold/10 text-gold hover:bg-gold/20 transition-colors disabled:opacity-50"
+                    >
+                      {recapLoading ? 'Generating' : 'Catch up'}
+                    </button>
+                  )}
+                  <a
+                    href={`/api/fishbowlz/export?roomId=${room.id}`}
+                    download
+                    className="text-xs px-2 py-1 rounded-full border border-white/15 text-gray-300 hover:bg-white/5"
+                  >
+                    TXT
+                  </a>
+                  <button onClick={openPdfReadyView} className="text-xs px-2 py-1 rounded-full border border-white/15 text-gray-300 hover:bg-white/5">PDF</button>
+                  <button onClick={downloadJsonExport} className="text-xs px-2 py-1 rounded-full border border-white/15 text-gray-300 hover:bg-white/5">JSON</button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  ['full', 'Full'],
+                  ['summary', 'Summary'],
+                  ['highlights', 'Highlights'],
+                  ['decisions', 'Decisions'],
+                  ['actions', 'Actions'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTranscriptMode(key as TranscriptMode)}
+                    className={`text-[10px] uppercase px-2 py-1 rounded-full border ${
+                      transcriptMode === key ? 'border-gold text-gold' : 'border-white/10 text-gray-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={transcriptQuery}
+                  onChange={(e) => setTranscriptQuery(e.target.value)}
+                  placeholder="Search transcript..."
+                  className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-500"
+                />
+                <button onClick={copyCurrentTranscript} className="text-xs px-3 py-2 rounded-lg border border-white/15 text-gray-300 hover:bg-white/5">
+                  Copy
                 </button>
-              )}
+              </div>
             </div>
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {recap && (
-                <div className="mb-3 p-3 rounded-lg bg-[#f5a623]/5 border border-[#f5a623]/20">
+              {recap && transcriptMode === 'summary' && (
+                <div className="p-3 rounded-lg bg-gold/5 border border-gold/20">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-[#f5a623]">AI Recap</span>
+                    <span className="text-xs font-medium text-gold">AI Recap</span>
                     <button
                       onClick={() => setRecap(null)}
                       className="text-xs text-gray-500 hover:text-gray-300"
@@ -1118,36 +1473,78 @@ function FishbowlRoomPageInner() {
                   <p className="text-sm text-gray-200 whitespace-pre-line leading-relaxed">{recap}</p>
                 </div>
               )}
-              {transcripts.length === 0 ? (
+              {filteredTranscriptItems.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-8">
-                  {room.state === 'ended' ? 'No transcript was recorded for this fishbowl.' : 'No transcript yet. Start talking!'}
+                  No transcript items found for this mode.
                 </p>
               ) : (
                 <>
-                  {visibleGroups.map((group, i) => (
-                    <div key={i} className="py-2 border-b border-white/5 last:border-0">
+                  {filteredTranscriptItems.slice(0, showAllTranscripts ? undefined : 20).map((item) => (
+                    <div key={`${item.id}-${item.started_at}`} className="py-2 border-b border-white/5 last:border-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-[#f5a623]">{group.speaker}</span>
-                        <span className="text-xs text-gray-500">[{group.role}]</span>
-                        <span className="text-xs text-gray-600">{timeAgo(group.timestamp)}</span>
+                        <span className="text-xs font-medium text-gold">{item.speaker_name}</span>
+                        <span className="text-xs text-gray-500">[{item.speaker_role}]</span>
+                        <span className="text-xs text-gray-600">{timestampLabel(item.started_at)}</span>
                       </div>
-                      <p className="text-sm text-gray-200 leading-relaxed">
-                        {group.segments.join(' ')}
-                      </p>
+                      <p className="text-sm text-gray-200 leading-relaxed">{item.text}</p>
                     </div>
                   ))}
-                  {!showAllTranscripts && groupedTranscripts.length > 10 && (
+                  {!showAllTranscripts && filteredTranscriptItems.length > 20 && (
                     <button
                       onClick={() => setShowAllTranscripts(true)}
-                      className="w-full py-2 text-xs text-[#f5a623] hover:text-[#d4941f] transition-colors"
+                      className="w-full py-2 text-xs text-gold hover:text-[#d4941f] transition-colors"
                     >
-                      Show all ({groupedTranscripts.length - 10} more groups)
+                      Show all ({filteredTranscriptItems.length - 20} more)
                     </button>
                   )}
                   <div ref={transcriptBottomRef} />
                 </>
               )}
             </div>
+          </div>
+
+          <div className="border-t border-white/10 p-4 space-y-3 max-h-[32vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Memory Archive</h4>
+              <span className="text-[11px] text-gray-500">Post-session view</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={archiveQuery}
+                onChange={(e) => setArchiveQuery(e.target.value)}
+                placeholder="Search summaries and decisions"
+                className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-500"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                ['all', 'All'],
+                ['summary', 'Summary'],
+                ['decisions', 'Decisions'],
+                ['actions', 'Actions'],
+                ['moments', 'Moments'],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setArchiveFilter(key as 'all' | 'summary' | 'decisions' | 'actions' | 'moments')}
+                  className={`text-[10px] uppercase px-2 py-1 rounded-full border ${
+                    archiveFilter === key ? 'border-gold text-gold' : 'border-white/10 text-gray-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {archiveEntries.slice(0, 8).map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500">{entry.type}</p>
+                <p className="text-xs text-gray-100 mt-1">{entry.title}</p>
+                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{entry.text}</p>
+              </div>
+            ))}
+            {archiveEntries.length === 0 && (
+              <p className="text-xs text-gray-500">No archive matches this filter yet.</p>
+            )}
           </div>
 
           {/* Room Chat */}
@@ -1172,7 +1569,7 @@ function FishbowlRoomPageInner() {
       {/* Sticky mobile audio controls */}
       {audioJoined && (user || guestMode) && room?.state === 'active' && (
         <div
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0d1b2a] border-t border-white/10 px-4 py-3 flex items-center justify-between"
+          className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-navy-light border-t border-white/10 px-4 py-3 flex items-center justify-between"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -1229,7 +1626,7 @@ function FishbowlRoomPageInner() {
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => router.push('/fishbowlz')}
-                className="w-full bg-[#f5a623] text-[#0a1628] font-semibold py-2.5 rounded-lg hover:bg-[#d4941f] transition-colors"
+                className="w-full bg-gold text-navy font-semibold py-2.5 rounded-lg hover:bg-[#d4941f] transition-colors"
               >
                 Back to Rooms
               </button>

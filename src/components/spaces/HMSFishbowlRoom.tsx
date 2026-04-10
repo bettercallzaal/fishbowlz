@@ -11,10 +11,8 @@ import {
   selectRoomState,
   HMSRoomState,
   selectPeers,
-  selectIsPeerAudioEnabled,
   selectIsLocalAudioEnabled,
   selectIsLocalVideoEnabled,
-  selectVideoTrackByPeerID,
   selectScreenShareByPeerID,
 } from '@100mslive/react-sdk';
 
@@ -31,21 +29,6 @@ interface HMSFishbowlRoomProps {
   guestMode?: boolean;
 }
 
-/** Renders a video element for a given track ID using the 100ms useVideo hook */
-function VideoTile({ trackId, isLocal }: { trackId: string; isLocal?: boolean }) {
-  const { videoRef } = useVideo({ trackId });
-  return (
-    <video
-      ref={videoRef}
-      autoPlay
-      muted={isLocal}
-      playsInline
-      className="w-full h-full object-cover rounded-lg"
-      style={{ transform: isLocal ? 'scaleX(-1)' : undefined }}
-    />
-  );
-}
-
 /** Renders a screen share track */
 function ScreenShareTile({ trackId }: { trackId: string }) {
   const { videoRef } = useVideo({ trackId });
@@ -57,54 +40,6 @@ function ScreenShareTile({ trackId }: { trackId: string }) {
       playsInline
       className="w-full h-full object-contain"
     />
-  );
-}
-
-/** Sub-component to read peer audio state via useHMSStore */
-function PeerAudioIndicator({ peerId, initial }: { peerId: string; initial: string }) {
-  const isAudioEnabled = useHMSStore(selectIsPeerAudioEnabled(peerId));
-  return (
-    <div className="relative">
-      {isAudioEnabled && (
-        <span className="absolute inset-0 rounded-full border-2 border-[#f5a623] animate-ping opacity-30" />
-      )}
-      <div
-        className={`w-12 h-12 rounded-full bg-gradient-to-br from-[#1a2a3a] to-[#0d1b2a] flex items-center justify-center text-[#ededed] font-semibold border-2 transition-colors ${
-          isAudioEnabled ? 'border-[#f5a623] shadow-[0_0_12px_rgba(245,166,35,0.4)]' : 'border-white/10'
-        }`}
-      >
-        {initial}
-      </div>
-    </div>
-  );
-}
-
-/** Peer tile that shows video if enabled, otherwise falls back to audio indicator */
-function PeerTile({ peerId, peerName, isLocal }: { peerId: string; peerName: string; isLocal: boolean }) {
-  const videoTrack = useHMSStore(selectVideoTrackByPeerID(peerId));
-  const initial = (peerName || '?')[0];
-  const hasVideo = videoTrack?.enabled;
-
-  if (hasVideo && videoTrack?.id) {
-    return (
-      <div className="flex flex-col items-center">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-[#f5a623] shadow-[0_0_12px_rgba(245,166,35,0.3)]">
-          <VideoTile trackId={videoTrack.id} isLocal={isLocal} />
-        </div>
-        <span className="text-white text-xs mt-1 truncate max-w-[80px] sm:max-w-[96px]">
-          {peerName} {isLocal && '(You)'}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-center">
-      <PeerAudioIndicator peerId={peerId} initial={initial} />
-      <span className="text-white text-xs mt-1 truncate max-w-[48px] sm:max-w-[60px]">
-        {peerName} {isLocal && '(You)'}
-      </span>
-    </div>
   );
 }
 
@@ -316,7 +251,6 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
       cancelled = true;
       hmsActions.leave().catch(() => {});
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount only
   }, [hmsActions, apiFetch]);
 
   const leaveRoom = async () => {
@@ -378,7 +312,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
             reconnectAttempts.current = 0;
             retryJoin();
           }}
-          className="px-4 py-1.5 bg-[#f5a623] text-[#0a1628] rounded-lg text-xs font-medium hover:bg-[#d4941f] transition-colors"
+          className="px-4 py-1.5 bg-gold text-navy rounded-lg text-xs font-medium hover:bg-[#d4941f] transition-colors"
         >
           Retry Connection
         </button>
@@ -402,17 +336,14 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
     );
   }
 
-  const speakers = peers.filter((p) => p.roleName === 'speaker' || p.roleName === 'host');
-  const listeners = peers.filter((p) => p.roleName === 'listener');
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f5a623] opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f5a623]" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gold opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-gold" />
           </span>
           <span className="text-white text-sm font-medium">Live</span>
           <span className="text-gray-500 text-xs">{participantCount ?? peers.length} in room</span>
@@ -437,7 +368,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
                 onClick={toggleMute}
                 className={`p-2 rounded-full transition-colors ${
                   isLocalAudioEnabled
-                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
+                    ? 'bg-gold/20 text-gold'
                     : 'bg-red-500/20 text-red-400'
                 }`}
                 aria-label={isLocalAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
@@ -453,7 +384,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
                 onClick={toggleVideo}
                 className={`p-2 rounded-full transition-colors ${
                   isLocalVideoEnabled
-                    ? 'bg-[#f5a623]/20 text-[#f5a623]'
+                    ? 'bg-gold/20 text-gold'
                     : 'bg-red-500/20 text-red-400'
                 }`}
                 aria-label={isLocalVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
@@ -470,7 +401,7 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
                   onClick={() => toggleScreenShare()}
                   className={`p-2 rounded-full transition-colors ${
                     amIScreenSharing
-                      ? 'bg-[#f5a623] text-[#0a1628]'
+                      ? 'bg-gold text-navy'
                       : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                   aria-label={amIScreenSharing ? 'Stop sharing screen' : 'Share screen'}
@@ -492,9 +423,9 @@ function HMSFishbowlRoomInner({ fishbowlRoomId, fishbowlSlug, userFid, userName,
 
       {/* Reconnecting banner */}
       {reconnecting && (
-        <div className="px-4 py-2 bg-[#f5a623]/10 border-b border-[#f5a623]/20 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#f5a623] animate-pulse" />
-          <span className="text-xs text-[#f5a623]">Reconnecting to audio...</span>
+        <div className="px-4 py-2 bg-gold/10 border-b border-gold/20 flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-gold animate-pulse" />
+          <span className="text-xs text-gold">Reconnecting to audio...</span>
         </div>
       )}
 

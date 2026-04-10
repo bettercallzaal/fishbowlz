@@ -2,6 +2,19 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 
+interface SpeechRecognitionResultItem {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultLike {
+  0: SpeechRecognitionResultItem;
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionEventLike {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
 /**
  * useLiveTranscript
  *
@@ -12,8 +25,16 @@ import { useEffect, useRef, useCallback } from 'react';
  * Falls back gracefully if unavailable.
  */
 export function useLiveTranscript(roomId: string, enabled: boolean) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<{
+    stop: () => void;
+    start: () => void;
+    onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+    onerror: ((event: { error?: string }) => void) | null;
+    onend: (() => void) | null;
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+  } | null>(null);
   const lastTranscriptRef = useRef<string>('');
   const transcriptCountRef = useRef(0);
   const pendingTextRef = useRef('');
@@ -51,8 +72,30 @@ export function useLiveTranscript(roomId: string, enabled: boolean) {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as Window & {
+      SpeechRecognition?: new () => {
+        stop: () => void;
+        start: () => void;
+        onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+        onerror: ((event: { error?: string }) => void) | null;
+        onend: (() => void) | null;
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+      };
+      webkitSpeechRecognition?: new () => {
+        stop: () => void;
+        start: () => void;
+        onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+        onerror: ((event: { error?: string }) => void) | null;
+        onend: (() => void) | null;
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+      };
+    };
+    const SpeechRecognitionCtor = win.SpeechRecognition || win.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
 
     const recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
@@ -60,13 +103,11 @@ export function useLiveTranscript(roomId: string, enabled: boolean) {
     recognition.lang = 'en-US';
     recognitionRef.current = recognition;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = async (event: any) => {
-      const results = Array.from(event.results) as any[];
+    recognition.onresult = async (event: SpeechRecognitionEventLike) => {
+      const results = Array.from(event.results);
 
       for (const result of results) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const transcript = (result[0] as any).transcript.trim();
+        const transcript = result[0]?.transcript?.trim() ?? '';
         if (!transcript) continue;
 
         const isFinal = result.isFinal;
@@ -87,8 +128,7 @@ export function useLiveTranscript(roomId: string, enabled: boolean) {
       }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: { error?: string }) => {
       if (event.error === 'no-speech') return;
       console.error('Speech recognition error:', event.error);
     };
