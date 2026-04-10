@@ -83,8 +83,11 @@ const PatchBodySchema = z.discriminatedUnion('action', [
 interface FishbowlSpeaker {
   fid: number;
   username: string;
-  joinedAt: string;
+  joinedAt?: string;
+  joined_at?: string;
   lastSeen?: string;
+  last_seen?: string;
+  [key: string]: unknown;
 }
 
 const STALE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -92,8 +95,9 @@ const STALE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 function pruneStaleUsers(users: FishbowlSpeaker[]): FishbowlSpeaker[] {
   const cutoff = Date.now() - STALE_TIMEOUT_MS;
   return users.filter((u) => {
-    const seen = u.lastSeen ? new Date(u.lastSeen).getTime() : new Date(u.joinedAt).getTime();
-    return seen > cutoff;
+    const seen = u.lastSeen || u.last_seen || u.joinedAt || u.joined_at;
+    if (!seen) return true;
+    return new Date(seen as string).getTime() > cutoff;
   });
 }
 

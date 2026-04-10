@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'Transcription service unavailable' }, { status: 500 });
+      return NextResponse.json({ error: 'Whisper API key not configured' }, { status: 500 });
     }
 
     // Transcribe via OpenAI Whisper
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     const result = await whisperRes.json();
     return NextResponse.json({ text: result.text, model });
-  } catch {
+  } catch (err) {
     return NextResponse.json({ error: 'Transcription failed' }, { status: 500 });
   }
 }
